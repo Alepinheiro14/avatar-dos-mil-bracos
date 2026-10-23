@@ -234,6 +234,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--azure); out
 const BALANCE = {
   CORE_LIFE: 50000,             // vida do Duque Fishron (modo normal)
   ARENA_TILES: 72,              // lado do quadrado, em blocos de 16 px
+  VIEW_HEIGHT: 1000,            // altura da arena que a câmera mostra no zoom padrão, em px
   TEST_TIME: 60 * 60,           // limite de cada teste
   INTRO_TIME: 150,
   LOCK_TIME: 150,               // pausa com escudo depois de cada trava de 25%
@@ -307,6 +308,8 @@ const BALANCE = {
 
   CORE_MOVE_INTERVAL: 180,      // o núcleo escolhe um novo ponto para flutuar
   CORE_MOVE_LERP: 0.025,
+  CORE_HEIGHT: [0.46, 0.52],    // faixa vertical do centro do núcleo (fração da arena); mais baixo = visível com o jogador no chão
+  CORE_WIDTH: [0.38, 0.62],     // faixa horizontal
   PILLAR_COOLDOWN: 400,         // laser vertical do núcleo durante os testes
   PILLAR_AIM: 50,               // o núcleo se alinha com o jogador
   PILLAR_TELEGRAPH: 60,
@@ -343,7 +346,7 @@ const CORE_SYMBOL = ['Core_Abyss', 'Core_Celestial', 'Core_Void'];
 const SEAL_ICON = ['Buff_AbyssSeal', 'Buff_CelestialSeal', 'Buff_VoidSeal'];
 const SEAL_NAME = ['Selo do Abismo', 'Selo Celeste', 'Selo do Vácuo'];
 const AX = 240, CX = S - 240;
-const CORE_HOME = { x: S / 2, y: Math.round(S * 0.37) };
+const CORE_HOME = { x: S / 2, y: Math.round(S * (B.CORE_HEIGHT[0] + B.CORE_HEIGHT[1]) / 2) };
 // Anel do Abismo: centro 3x3 vazio com o emissor; blocos até o raio layers + 1,3 (fica redondo)
 const ABYSS_N = 2 * (B.ABYSS_LAYERS + 1) + 1, ABYSS_C = B.ABYSS_LAYERS + 1;
 const ABYSS_PATTERN = Array.from({ length: ABYSS_N }, (_, gy) => Array.from({ length: ABYSS_N }, (_, gx) => {
@@ -736,7 +739,7 @@ function updateCoreMotion() {
     } else {
       if (--C.moveT <= 0) {
         C.moveT = B.CORE_MOVE_INTERVAL;
-        C.dest = { x: rand(S * 0.27, S * 0.73), y: rand(S * 0.26, S * 0.42) };
+        C.dest = { x: rand(S * B.CORE_WIDTH[0], S * B.CORE_WIDTH[1]), y: rand(S * B.CORE_HEIGHT[0], S * B.CORE_HEIGHT[1]) };
       }
       C.bx = lerp(C.bx, C.dest.x, B.CORE_MOVE_LERP);
       C.by = lerp(C.by, C.dest.y, B.CORE_MOVE_LERP);
@@ -1514,7 +1517,7 @@ function updateFx() {
   if (G.shake < 0.3) G.shake = 0;
 }
 
-function viewScale() { return clamp(ch / 900, 0.5, 2.4) * G.zoom; }
+function viewScale() { return clamp(ch / B.VIEW_HEIGHT, 0.5, 2.4) * G.zoom; }
 function updateCamera() {
   const z = viewScale(), p = pc();
   const tx = p.x + (mouse.wx - p.x) * 0.15, ty = p.y + (mouse.wy - p.y) * 0.15;
