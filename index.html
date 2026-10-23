@@ -1,0 +1,1908 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Demo jogável da luta contra o Avatar dos Mil Braços, boss de um mod de Terraria.">
+<title>Avatar dos Mil Braços</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;600&family=Cinzel:wght@600;800&display=swap">
+<style>
+/* Layout: full-screen canvas for the fight; DOM cards float over it for start, pause, end and the tuning drawer. */
+:root {
+  --void: #07060f;
+  --panel: #13102a;
+  --line: #3b3164;
+  --text: #ece7fa;
+  --muted: #a198c4;
+  --gold: #e9bb4f;
+  --magenta: #de58d4;
+  --azure: #5aa6ff;
+  --danger: #ff5464;
+  --display: "Cinzel", "Trajan Pro", Georgia, serif;
+  --ui: "Chakra Petch", "Segoe UI", system-ui, sans-serif;
+  color-scheme: dark;
+}
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--void);
+  color: var(--text);
+  font-family: var(--ui);
+  overflow: hidden;
+}
+#game {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: crosshair;
+  touch-action: none;
+}
+.overlay {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding-block: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-bottom, 0px));
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  background: color-mix(in srgb, var(--void) 78%, transparent);
+  overflow-y: auto;
+  z-index: 5;
+}
+.card {
+  width: 100%;
+  max-width: 600px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 28px 28px 24px;
+  display: grid;
+  gap: 18px;
+  box-shadow: 0 30px 80px color-mix(in srgb, var(--magenta) 14%, transparent);
+}
+.eyebrow {
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0;
+}
+h1, h2 {
+  font-family: var(--display);
+  font-weight: 800;
+  margin: 0;
+  text-wrap: balance;
+  letter-spacing: 0.02em;
+}
+h1 { font-size: clamp(28px, 5vw, 40px); line-height: 1.05; }
+h2 { font-size: clamp(24px, 4vw, 32px); }
+p { margin: 0; line-height: 1.55; color: var(--text); max-width: 62ch; }
+.muted { color: var(--muted); font-size: 14px; }
+.hands { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  font-size: 13px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+}
+.chip.abyss { color: var(--magenta); }
+.chip.celestial { color: var(--gold); }
+.chip.void { color: var(--azure); }
+.controls {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 14px;
+  font-size: 14px;
+  margin: 0;
+}
+.controls dt { white-space: nowrap; }
+.controls dd { margin: 0; color: var(--muted); min-width: 0; }
+kbd {
+  font-family: var(--ui);
+  font-size: 12px;
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--void);
+  color: var(--text);
+}
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+button {
+  font-family: var(--ui);
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--void);
+  background: var(--gold);
+  border: 0;
+  border-radius: 4px;
+  padding: 10px 18px;
+  cursor: pointer;
+}
+button.ghost {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--line);
+}
+button:disabled { opacity: 0.5; cursor: wait; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--azure); outline-offset: 2px; }
+#touchNote { color: var(--danger); font-size: 14px; }
+#tuneBtn {
+  position: fixed;
+  top: calc(12px + env(safe-area-inset-top, 0px));
+  right: calc(12px + env(safe-area-inset-right, 0px));
+  z-index: 4;
+  font-size: 13px;
+  padding: 7px 12px;
+}
+#tune {
+  position: fixed;
+  top: calc(52px + env(safe-area-inset-top, 0px));
+  right: calc(12px + env(safe-area-inset-right, 0px));
+  z-index: 4;
+  width: min(300px, calc(100vw - 24px));
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+  font-size: 14px;
+}
+#tune label { display: flex; gap: 8px; align-items: flex-start; line-height: 1.35; }
+#tune button { font-size: 13px; padding: 8px 10px; width: 100%; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<button id="tuneBtn" class="ghost" type="button">Ajustes</button>
+<div id="tune" hidden>
+  <label><input type="checkbox" id="optGod"> Invencível (o wipe ainda mata)</label>
+  <label><input type="checkbox" id="optHints"> Mostrar dicas na tela</label>
+  <button type="button" class="ghost" id="btnComplete">Concluir o teste atual</button>
+  <button type="button" class="ghost" id="btnFinal">Pular para os 25% finais</button>
+  <button type="button" class="ghost" id="btnDeath">Ver a morte do boss</button>
+  <button type="button" class="ghost" id="btnRestart">Reiniciar a luta</button>
+  <p class="muted">Tempos, danos e quantidades ficam no objeto BALANCE, no topo do script.</p>
+</div>
+
+<div class="overlay" id="startScreen">
+  <div class="card">
+    <p class="eyebrow">Demo jogável · protótipo para o mod do tModLoader</p>
+    <h1>Avatar dos Mil Braços</h1>
+    <p>Só o núcleo toma dano. O resto você descobre lutando. Se travar, ligue "Mostrar dicas" em Ajustes.</p>
+    <div class="hands">
+      <span class="chip abyss">Abismo · chão</span>
+      <span class="chip celestial">Celeste · teto</span>
+      <span class="chip void">Vácuo · paredes</span>
+    </div>
+    <dl class="controls">
+      <dt><kbd>A</kbd> <kbd>D</kbd></dt><dd>Andar</dd>
+      <dt><kbd>W</kbd> / <kbd>Espaço</kbd></dt><dd>Pular; segure no ar para voar</dd>
+      <dt><kbd>S</kbd></dt><dd>Descer mais rápido</dd>
+      <dt><kbd>A</kbd><kbd>A</kbd> / <kbd>D</kbd><kbd>D</kbd> · <kbd>Shift</kbd></dt><dd>Dash (toque duplo ou Shift)</dd>
+      <dt>Botão esquerdo</dt><dd>Atirar</dd>
+      <dt>Botão direito</dt><dd>Espada (golpe em arco)</dd>
+      <dt>Clique em blocos pequenos</dt><dd>Martelo: esquerdo avança o formato, direito volta</dd>
+      <dt><kbd>1</kbd> <kbd>2</kbd> · <kbd>E</kbd></dt><dd>Pistola ou escopeta · alternar</dd>
+      <dt><kbd>Q</kbd></dt><dd>Poção de cura</dd>
+      <dt><kbd>P</kbd> / <kbd>Esc</kbd> · <kbd>R</kbd></dt><dd>Pausar · reiniciar</dd>
+      <dt>Roda do mouse</dt><dd>Zoom</dd>
+    </dl>
+    <p id="touchNote" hidden>Este demo precisa de teclado e mouse.</p>
+    <p id="loadError" class="muted" hidden></p>
+    <div class="row">
+      <button type="button" id="btnStart" disabled>Carregando sprites…</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="pauseScreen" hidden>
+  <div class="card">
+    <h2>Pausado</h2>
+    <div class="row">
+      <button type="button" id="btnResume">Continuar</button>
+      <button type="button" class="ghost" id="btnPauseRestart">Reiniciar</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="endScreen" hidden>
+  <div class="card">
+    <p class="eyebrow" id="endEyebrow"></p>
+    <h2 id="endTitle"></h2>
+    <p id="endText"></p>
+    <div class="row">
+      <button type="button" id="btnAgain">Tentar de novo</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+// ============================================================
+// BALANCE: tudo que se ajusta na luta. Tempos em ticks (60 por segundo).
+// ============================================================
+const BALANCE = {
+  CORE_LIFE: 50000,             // vida do Duque Fishron (modo normal)
+  ARENA_TILES: 72,              // lado do quadrado, em blocos de 16 px
+  TEST_TIME: 60 * 60,           // limite de cada teste
+  INTRO_TIME: 150,
+  LOCK_TIME: 150,               // pausa com escudo depois de cada trava de 25%
+  FINAL_INTRO_TIME: 170,        // máscara abre e fecha ao entrar nos 25% finais
+  WIPE_CHARGE: 150,             // carga do Core_Wipe antes da explosão
+  EXPLOSION_SCALE: 7,
+  HAND_DEATH_TIME: 36,          // Hand_*_Death: 6 frames rachando antes da explosão do braço
+  CORE_DEATH_TPF: [8, 10, 10, 8], // ticks por frame em cada bloco de 4 frames do Core_Death
+  DEATH_EXPLOSION_SCALE: 3,
+
+  PLAYER_LIFE: 600,
+  PLAYER_REGEN: 2.5,            // vida por segundo
+  PLAYER_IFRAMES: 40,
+  RUN_SPEED: 6.5,
+  JUMP_SPEED: 9.5,
+  GRAVITY: 0.4,
+  FLY_THRUST: 0.8,
+  FLY_MAX_SPEED: 7,
+  FLIGHT_TIME: 200,             // tempo de voo das asas; recarrega no chão
+  DASH_SPEED: 14,               // dash das Tabi / Master Ninja Gear
+  DASH_TIME: 18,
+  DASH_COOLDOWN: 35,
+  DASH_DOUBLE_TAP: 15,          // janela do toque duplo em A/D
+  GUN_DAMAGE: 150,
+  GUN_COOLDOWN: 8,
+  GUN_SPEED: 17,
+  SHOTGUN_PELLETS: 6,           // escopeta: chumbos por disparo
+  SHOTGUN_DAMAGE: 60,           // por chumbo; nas peças e mãos o disparo inteiro conta como 1 golpe
+  SHOTGUN_COOLDOWN: 26,
+  SHOTGUN_SPREAD: 0.32,         // abertura total do leque, em radianos
+  SHOTGUN_SPEED: 15,
+  SHOTGUN_RANGE: 32,            // vida do chumbo em ticks (alcance curto)
+  SWORD_DAMAGE: 380,
+  SWORD_COOLDOWN: 22,
+  SWORD_RANGE: 84,
+  POTION_HEAL: 200,
+  POTION_COOLDOWN: 60 * 40,
+
+  ABYSS_BLOCK_HITS: 3,          // um golpe por frame de dano
+  ABYSS_LAYERS: 3,              // camadas de blocos entre a borda e o centro
+  ABYSS_EMITTER_HITS: 4,
+  AURA_OFF: 130,                // janela para cavar: com a aura ligada os blocos não levam dano
+  AURA_WARN: 60,
+  AURA_ON: 150,
+  AURA_DAMAGE: 40,
+  AURA_RADIUS: 150,             // cobre o anel inteiro
+
+  VOID_SEQUENCE_LENGTH: 5,      // o painel tem 5 espaços
+  VOID_LOCK_HITS: 3,
+  VOID_TILE_SPACING: 48,        // distância entre os blocos do puzzle
+  VOID_TILE_HITBOX: 32,         // área de clique de cada bloco
+  HAMMER_REACH: 150,
+
+  RING_COUNT: 6,
+  RING_RADIUS: 30,
+  CELESTIAL_BLOCK_HITS: 3,
+  BAT_INTERVAL: 120,
+  BAT_FLY_TIME: 80,
+  BOLT_SPEED: 8,
+  BOLT_DAMAGE: 60,
+
+  HAND_PROC_HITS: 4,            // golpes numa mão para ativá-la (teste certo ou wipe)
+  HAND_PROC_RESET: 180,         // a contagem zera depois disso sem novo golpe
+
+  ATTACK_SCALE: 1.5,            // tamanho dos orbes, da estrela e dos raios dos morcegos
+  HAND_LASER_COOLDOWN: 170,
+  HAND_ORB_COOLDOWN: 160,
+  HAND_STAR_COOLDOWN: 230,
+  CORE_ATTACK_COOLDOWN: 100,    // peito exposto: laser → orbes → estrela → coluna, alternados
+  FINAL_STAND_MULTIPLIER: 5,    // depois do último selo, o núcleo ataca 5x mais rápido
+
+  CORE_MOVE_INTERVAL: 180,      // o núcleo escolhe um novo ponto para flutuar
+  CORE_MOVE_LERP: 0.025,
+  PILLAR_COOLDOWN: 400,         // laser vertical do núcleo durante os testes
+  PILLAR_AIM: 50,               // o núcleo se alinha com o jogador
+  PILLAR_TELEGRAPH: 60,
+  PILLAR_FIRE: 50,
+  PILLAR_THICKNESS: 3.5,
+  PILLAR_DAMAGE: 140,
+
+  LASER_AIM: 40,
+  LASER_TELEGRAPH: 55,
+  LASER_FIRE: 36,
+  LASER_DAMAGE: 90,
+  LASER_HALF_WIDTH: 14,
+  HAND_LASER_THICKNESS: 1.5,
+  ORB_COUNT: 5,
+  ORB_SPEED: 3.2,
+  ORB_SKY_SPEED: 4.5,           // orbes da mão do Abismo: nascem no teto e caem na direção do jogador
+  ORB_RADIUS: 110,
+  ORB_LIFE: 330,
+  ORB_DAMAGE: 70,
+  STAR_LIFE: 300,
+  STAR_SPEED: 9,
+  STAR_HOMING: 0.07,
+  STAR_DAMAGE: 100,
+};
+const B = BALANCE;
+
+const S = B.ARENA_TILES * 16;
+const ABYSS = 0, CELESTIAL = 1, VOID = 2;
+const NAMES = ['Abismo', 'Celeste', 'Vácuo'];
+const HAND_NAME = ['mão do Abismo', 'mão Celeste', 'mão do Vácuo'];
+const HAND_LABEL = HAND_NAME.map(n => 'a ' + n);
+const COLORS = ['#e05ad6', '#f0c35a', '#5aa6ff'];
+const CORE_SYMBOL = ['Core_Abyss', 'Core_Celestial', 'Core_Void'];
+const SEAL_ICON = ['Buff_AbyssSeal', 'Buff_CelestialSeal', 'Buff_VoidSeal'];
+const SEAL_NAME = ['Selo do Abismo', 'Selo Celeste', 'Selo do Vácuo'];
+const AX = 240, CX = S - 240;
+const CORE_HOME = { x: S / 2, y: Math.round(S * 0.37) };
+// Anel do Abismo: centro 3x3 vazio com o emissor; blocos até o raio layers + 1,3 (fica redondo)
+const ABYSS_N = 2 * (B.ABYSS_LAYERS + 1) + 1, ABYSS_C = B.ABYSS_LAYERS + 1;
+const ABYSS_PATTERN = Array.from({ length: ABYSS_N }, (_, gy) => Array.from({ length: ABYSS_N }, (_, gx) => {
+  const dx = gx - ABYSS_C, dy = gy - ABYSS_C;
+  return Math.max(Math.abs(dx), Math.abs(dy)) > 1 && Math.hypot(dx, dy) <= B.ABYSS_LAYERS + 1.3 ? 'X' : '.';
+}).join(''));
+const FONT_UI = '"Chakra Petch", "Segoe UI", system-ui, sans-serif';
+const FONT_DISPLAY = '"Cinzel", "Trajan Pro", Georgia, serif';
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// [largura do frame, altura do frame, frames]; folhas verticais
+const SHEETS = {
+  Core: [302, 346, 8], Core_Shielded: [302, 346, 8], Core_Abyss: [302, 346, 8],
+  Core_Celestial: [302, 346, 8], Core_Void: [302, 346, 8], Core_ChestBroken: [302, 346, 8],
+  Core_Reveal: [302, 346, 8], Core_Wipe: [302, 346, 8], Wipe_Explosion: [256, 256, 10],
+  Hand_Abyss_Floor: [154, 308, 8], Hand_Celestial_Ceiling: [154, 308, 8], Hand_Void_Wall: [308, 154, 8],
+  Celestial_Crystal: [28, 48, 4],
+  Buff_AbyssSeal: [32, 32, 1], Buff_CelestialSeal: [32, 32, 1], Buff_VoidSeal: [32, 32, 1],
+  Test_Timer: [64, 64, 13],
+  Abyss_SealBlock: [32, 32, 3], Abyss_SealBlock_Reform: [64, 64, 6], Abyss_Emitter: [32, 32, 8],
+  Abyss_Aura: [192, 192, 6], Abyss_SpinOrb: [48, 48, 4],
+  Void_PuzzleTile: [288, 270, 1], Void_MatchGlow: [16, 16, 6], Void_ShapeGlyph: [16, 16, 12],
+  Void_Panel: [112, 28, 1], Void_BuffLock: [32, 32, 6],
+  Void_LaserStart: [32, 40, 4], Void_LaserBody: [16, 40, 4], Void_LaserEnd: [24, 40, 4],
+  Void_LaserTelegraph: [16, 40, 2],
+  Celestial_Ring: [80, 80, 9], Celestial_RingArrow: [24, 24, 1], Celestial_Bat: [56, 40, 13],
+  Celestial_BatBolt: [24, 16, 3], Celestial_BuffBlock: [32, 32, 8], Celestial_HomingStar: [80, 80, 6],
+  Core_Death: [302, 346, 16],
+  Hand_Abyss_Floor_Death: [154, 308, 6], Hand_Celestial_Ceiling_Death: [154, 308, 6], Hand_Void_Wall_Death: [308, 154, 6],
+  Arm_Explosion_Abyss: [128, 128, 8], Arm_Explosion_Celestial: [128, 128, 8], Arm_Explosion_Void: [128, 128, 8],
+  Gore_MaskLeft: [20, 56, 1], Gore_MaskRight: [20, 56, 1], Gore_Horn: [20, 44, 1], Gore_Rib: [28, 16, 1],
+  Gore_EyeShard: [18, 22, 1], Gore_Tendril: [16, 44, 1], Gore_Claw: [16, 28, 1], Gore_Plate: [36, 22, 1], Gore_Bronze: [32, 14, 1],
+};
+const HAND_SPRITE = ['Hand_Abyss_Floor', 'Hand_Celestial_Ceiling', 'Hand_Void_Wall'];
+const ARM_EXPLOSION = ['Arm_Explosion_Abyss', 'Arm_Explosion_Celestial', 'Arm_Explosion_Void'];
+const HAND_GORES = ['Gore_Claw', 'Gore_Claw', 'Gore_Claw', 'Gore_Plate', 'Gore_Bronze'];
+const CORE_GORES = ['Gore_MaskLeft', 'Gore_MaskRight', 'Gore_Horn', 'Gore_Horn', 'Gore_Rib', 'Gore_Rib', 'Gore_EyeShard', 'Gore_Tendril', 'Gore_Tendril'];
+const IMG = {};
+
+// ---------- utilidades ----------
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+const rand = (a, b) => a + Math.random() * (b - a);
+const easeOut = t => 1 - Math.pow(1 - clamp(t, 0, 1), 3);
+const dist = (ax, ay, bx, by) => Math.hypot(ax - bx, ay - by);
+const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const fmt = n => Math.max(0, Math.round(n)).toLocaleString('pt-BR');
+function circleRect(cx, cy, r, rc) {
+  const nx = clamp(cx, rc.x, rc.x + rc.w), ny = clamp(cy, rc.y, rc.y + rc.h);
+  return (cx - nx) ** 2 + (cy - ny) ** 2 < r * r;
+}
+function pointIn(rc, x, y) { return x >= rc.x && x <= rc.x + rc.w && y >= rc.y && y <= rc.y + rc.h; }
+
+// ---------- canvas ----------
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+let cw = 0, ch = 0, dpr = 1;
+function resize() {
+  dpr = Math.min(2, window.devicePixelRatio || 1);
+  cw = window.innerWidth; ch = window.innerHeight;
+  canvas.width = Math.round(cw * dpr); canvas.height = Math.round(ch * dpr);
+}
+addEventListener('resize', resize);
+resize();
+
+function spr(name, frame, x, y, o = {}) {
+  const img = IMG[name], s = SHEETS[name];
+  if (!img) return;
+  const [fw, fh, n] = s;
+  const f = ((Math.floor(frame) % n) + n) % n;
+  const sc = o.scale ?? 1;
+  ctx.save();
+  ctx.translate(x, y);
+  if (o.rot) ctx.rotate(o.rot);
+  ctx.scale(o.flip ? -sc : sc, sc);
+  if (o.alpha != null) ctx.globalAlpha *= clamp(o.alpha, 0, 1);
+  if (o.add) ctx.globalCompositeOperation = 'lighter';
+  ctx.drawImage(img, 0, f * fh, fw, fh, -(o.ox ?? fw / 2), -(o.oy ?? fh / 2), fw, fh);
+  ctx.restore();
+}
+
+// ---------- entrada ----------
+const keys = new Set();
+const mouse = { sx: 0, sy: 0, wx: 0, wy: 0, left: false, right: false, lp: false, rp: false };
+addEventListener('keydown', e => {
+  if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
+  keys.add(e.code);
+  if (!e.repeat) dashTap(e.code);
+  if (e.code === 'Digit1') opt.weapon = 0;
+  if (e.code === 'Digit2') opt.weapon = 1;
+  if (e.code === 'KeyE' && !e.repeat) opt.weapon = 1 - opt.weapon;
+  if (e.code === 'KeyP' || e.code === 'Escape') togglePause();
+  if (e.code === 'KeyR' && started) restart();
+});
+addEventListener('keyup', e => keys.delete(e.code));
+addEventListener('blur', () => { keys.clear(); mouse.left = mouse.right = false; });
+canvas.addEventListener('mousemove', e => { mouse.sx = e.clientX; mouse.sy = e.clientY; });
+canvas.addEventListener('mousedown', e => {
+  mouse.sx = e.clientX; mouse.sy = e.clientY;
+  if (e.button === 0) { mouse.left = true; mouse.lp = true; }
+  if (e.button === 2) { mouse.right = true; mouse.rp = true; }
+});
+addEventListener('mouseup', e => { if (e.button === 0) mouse.left = false; if (e.button === 2) mouse.right = false; });
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+canvas.addEventListener('wheel', e => { e.preventDefault(); G.zoom = clamp(G.zoom * (e.deltaY > 0 ? 0.9 : 1.1), 0.6, 1.6); }, { passive: false });
+const down = (...codes) => codes.some(c => keys.has(c));
+// toque duplo em A/D (ou Shift) pede um dash; ele sai no próximo tick se o recarregamento acabou
+function dashTap(code) {
+  if (!P || !G) return;
+  let dir = 0;
+  if (code === 'KeyA' || code === 'ArrowLeft') dir = -1;
+  else if (code === 'KeyD' || code === 'ArrowRight') dir = 1;
+  else if (code === 'ShiftLeft' || code === 'ShiftRight') {
+    P.dashQueued = down('KeyA', 'ArrowLeft') ? -1 : down('KeyD', 'ArrowRight') ? 1 : P.face;
+    return;
+  } else return;
+  if (P.lastTap.dir === dir && G.tick - P.lastTap.tick <= B.DASH_DOUBLE_TAP) { P.dashQueued = dir; P.lastTap.dir = 0; }
+  else P.lastTap = { dir, tick: G.tick };
+}
+
+// ---------- estado ----------
+let G, P, C;
+let started = false, running = false, paused = false;
+const opt = { god: false, hints: false, weapon: 0 };
+const WEAPON_NAME = ['Pistola', 'Escopeta'];
+const stars = Array.from({ length: 320 }, () => ({ x: Math.random(), y: Math.random(), s: Math.random() < 0.15 ? 2 : 1, b: rand(0.25, 0.9), p: rand(0.05, 0.25) }));
+
+function newGame() {
+  G = {
+    tick: 0, time: 0, zoom: G ? G.zoom : 1, shake: 0,
+    cam: { x: S / 2, y: S - 300 },
+    hands: [
+      { kind: ABYSS, side: 0, y: 0, baseY: 0 },
+      { kind: CELESTIAL, side: 0, y: 0, baseY: 0 },
+      { kind: VOID, side: -1, y: Math.round(S * 0.4), baseY: Math.round(S * 0.4) },
+      { kind: VOID, side: 1, y: Math.round(S * 0.66), baseY: Math.round(S * 0.66) },
+    ].map(h => Object.assign(h, { emerge: 0, destroyed: false, dying: 0, anim: Math.random() * 100, flash: 0, cast: 0, laser: null, proc: 0, procT: 0 })),
+    cd: [120, 220, 80], voidNext: 0,
+    abyss: null, voidT: null, cel: null,
+    bullets: [], lasers: [], orbs: [], starsP: [], bolts: [], bats: [],
+    parts: [], crystals: [], texts: [], toasts: [], anims: [], gores: [],
+    endTimer: 0, immuneCd: 0, swingFx: null,
+  };
+  P = {
+    x: S / 2 - 10, y: S - 42, w: 20, h: 42, vx: 0, vy: 0, onGround: true, face: 1,
+    hp: B.PLAYER_LIFE, iframes: 0, flight: B.FLIGHT_TIME, gunCd: 0, swordCd: 0, potionCd: 0,
+    seals: new Set(), dead: false, deathReason: '', upHeld: false, hammerFx: 0,
+    dashT: 0, dashDir: 0, dashCd: 0, dashQueued: 0, lastTap: { dir: 0, tick: -99 }, trail: [],
+  };
+  C = {
+    x: CORE_HOME.x, y: CORE_HOME.y, bx: CORE_HOME.x, by: CORE_HOME.y, dest: { ...CORE_HOME }, moveT: B.CORE_MOVE_INTERVAL,
+    pillar: null, pillarCd: 300,
+    life: B.CORE_LIFE, state: 'intro', t: 0, q: 0,
+    order: shuffle([ABYSS, CELESTIAL, VOID]), finalOrder: shuffle([ABYSS, CELESTIAL, VOID]), finalIdx: 0,
+    target: -1, testT: 0, attackCd: 60, attackIdx: 0, flash: 0, alpha: 0,
+  };
+}
+
+// ---------- mensagens ----------
+// hint = texto que ensina a mecânica; só aparece com "Mostrar dicas" ligado
+function toast(txt, color = '#ece7fa', life = 200, hint = false) {
+  if (hint && !opt.hints) return;
+  G.toasts.push({ txt, color, t: 0, life });
+  if (G.toasts.length > 3) G.toasts.shift();
+}
+function floatText(x, y, txt, color = '#fff', size = 16) {
+  G.texts.push({ x: x + rand(-8, 8), y, txt, color, size, t: 0 });
+}
+// animação solta no mundo (explosões); toca uma vez e some
+function playAnim(name, x, y, tpf, scale = 1) {
+  G.anims.push({ name, x, y, tpf, scale, t: 0 });
+}
+// pedaços com gravidade que quicam no chão da arena
+function spawnGores(names, x, y, speed) {
+  for (const name of names) {
+    const a = Math.random() * Math.PI * 2, v = rand(0.5, 1) * speed;
+    G.gores.push({ name, x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 4, rot: 0, vr: rand(-0.25, 0.25), t: 0 });
+  }
+}
+function burst(x, y, color, n = 14, speed = 4, life = 40) {
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2, v = rand(0.4, 1) * speed;
+    G.parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, t: 0, life: life * rand(0.6, 1.2), color, size: rand(2, 4) });
+  }
+}
+
+// ============================================================
+// Núcleo: controlador da luta
+// ============================================================
+function setState(s) { C.state = s; C.t = 0; }
+const threshold = () => B.CORE_LIFE * (3 - C.q) / 4;
+const pc = () => ({ x: P.x + P.w / 2, y: P.y + P.h / 2 });
+const handsOf = k => G.hands.filter(h => h.kind === k);
+const kindAlive = k => handsOf(k).every(h => !h.destroyed && !h.dying && h.emerge >= 1);
+
+function beginCycle() {
+  C.target = C.q < 3 ? C.order[C.q] : C.finalOrder[C.finalIdx];
+  for (const h of G.hands) h.proc = 0;
+  setState('await');
+  toast(`O peito mostra o ${NAMES[C.target]}. Bata na ${HAND_NAME[C.target]}.`, COLORS[C.target], 260, true);
+}
+
+function startTest() {
+  const k = C.target;
+  setState('test');
+  C.testT = B.TEST_TIME;
+  G.bats = []; G.bolts = [];
+  if (k === ABYSS) setupAbyss();
+  if (k === VOID) setupVoid();
+  if (k === CELESTIAL) setupCelestial();
+  toast(`Teste do ${NAMES[k]} iniciado: 1:00`, COLORS[k]);
+}
+
+function teardownTest(timeout) {
+  if (G.abyss) {
+    if (timeout) {
+      for (const b of G.abyss.blocks) { if (!b.alive) b.reform = 36; b.alive = true; b.hits = 0; }
+      G.abyss.emitter.alive = true;
+      G.abyss.closing = 70;
+    } else G.abyss = null;
+  }
+  G.voidT = null;
+  G.cel = null;
+  G.bats = [];
+}
+
+function testTimeout() {
+  teardownTest(true);
+  setState('await');
+  toast('Tempo esgotado. O teste reiniciou.', '#ff8a94', 260);
+}
+
+function grantSeal(k, x, y) {
+  P.seals.add(k);
+  burst(x, y, COLORS[k], 40, 7, 60);
+  for (const h of handsOf(k)) h.dying = B.HAND_DEATH_TIME;
+  teardownTest(false);
+  G.shake = Math.max(G.shake, 10);
+  toast(`${SEAL_NAME[k]} obtido. A mão foi destruída.`, COLORS[k]);
+  if (C.q < 3) {
+    setState('chestready');
+  } else {
+    C.finalIdx++;
+    if (C.finalIdx < 3) beginCycle();
+    else {
+      setState('chestfinal');
+      C.attackCd = 30;
+      G.shake = Math.max(G.shake, 20);
+      toast('Última resistência!', '#ff5464', 260);
+      toast('Com os três selos, quebre a máscara do núcleo.', '#fff', 260, true);
+    }
+  }
+}
+
+function beginLock() {
+  C.q++;
+  C.life = Math.min(C.life, threshold() + B.CORE_LIFE / 4);
+  P.seals.clear();
+  setState('lock');
+  G.shake = Math.max(G.shake, 14);
+  burst(C.x, C.y + 20, '#d9d0ff', 40, 8, 50);
+  toast(`${(4 - C.q) * 25}%: o núcleo travou e fechou o peito.`, '#d9d0ff');
+  for (const h of G.hands) {
+    if (h.destroyed || h.dying) { h.destroyed = false; h.dying = 0; h.emerge = 0; }
+  }
+  G.cd = [140, 240, 100];
+}
+
+function coreHit(dmg) {
+  C.flash = 6;
+  const s = C.state;
+  if (s === 'exposed') {
+    const real = Math.min(dmg, C.life - threshold());
+    C.life -= real;
+    floatText(C.x, C.y - 40, fmt(real), '#ffb347', 18);
+    if (C.life <= threshold()) beginLock();
+  } else if (s === 'exposedfinal') {
+    C.life -= dmg;
+    floatText(C.x, C.y - 40, fmt(dmg), '#ffb347', 18);
+    if (C.life <= 0) startDeath();
+  } else if (s === 'chestready' && P.seals.has(C.target)) {
+    setState('exposed');
+    C.attackCd = 70;
+    G.shake = Math.max(G.shake, 12);
+    burst(C.x, C.y + 20, COLORS[C.target], 50, 9, 60);
+    toast('O peito quebrou.', '#ff8a5c');
+    toast(`Cause dano até ${(3 - C.q) * 25}%.`, '#ff8a5c', 200, true);
+  } else if (s === 'chestfinal' && P.seals.size === 3) {
+    setState('revealopen');
+    C.attackCd = 80;
+    G.shake = Math.max(G.shake, 16);
+    burst(C.x, C.y - 60, '#e05ad6', 70, 10, 70);
+    toast('A máscara se partiu. Golpe final!', '#e05ad6');
+  } else if (G.immuneCd <= 0) {
+    G.immuneCd = 20;
+    const msg = s === 'chestready' && opt.hints ? 'precisa do selo' : 'IMUNE';
+    floatText(C.x, C.y - 40, msg, '#bdb3e6', 14);
+  }
+}
+
+// Toda mão precisa de HAND_PROC_HITS golpes seguidos para ativar: a certa começa o teste, a errada causa o wipe.
+function onHandHit(h) {
+  h.flash = 8;
+  const s = C.state;
+  if (s !== 'await' && s !== 'test' && s !== 'buffready') return;
+  if (s !== 'await' && h.kind === C.target) return;
+  const group = handsOf(h.kind);
+  const n = group[0].proc + 1;
+  for (const g of group) { g.proc = n; g.procT = B.HAND_PROC_RESET; g.flash = 8; }
+  if (n < B.HAND_PROC_HITS) return;
+  for (const g of group) g.proc = 0;
+  if (h.kind === C.target) startTest();
+  else startWipe(h.kind);
+}
+
+function startWipe(k) {
+  if (C.state === 'wipe') return;
+  setState('wipe');
+  G.lasers = []; G.orbs = []; G.starsP = []; G.bolts = []; G.bats = [];
+  for (const h of G.hands) h.laser = null;
+  C.pillar = null;
+  toast(`Mão errada: ${HAND_LABEL[k]}. O núcleo vai explodir!`, '#ff5464', 400);
+}
+
+// Morte do boss: no mod, checkDead devolve false e o NPC fica invulnerável enquanto a sequência toca;
+// no fim saem as gores, a explosão grande e só então o loot.
+const CORE_DEATH_TOTAL = B.CORE_DEATH_TPF.reduce((s, t) => s + t * 4, 0);
+function startDeath() {
+  C.life = 0;
+  setState('dying');
+  G.lasers = []; G.orbs = []; G.starsP = []; G.bolts = []; G.bats = [];
+  for (const h of G.hands) h.laser = null;
+  C.pillar = null;
+  G.shake = Math.max(G.shake, 16);
+}
+function coreDeathFrame(t) {
+  let f = 0;
+  for (const tpf of B.CORE_DEATH_TPF) {
+    if (t < tpf * 4) return f + Math.floor(t / tpf);
+    t -= tpf * 4; f += 4;
+  }
+  return 15;
+}
+function updateDeath() {
+  const t = C.t, f = coreDeathFrame(t);
+  // 0-3: braços do fundo explodem em sequência
+  if (f < 4 && t % B.CORE_DEATH_TPF[0] === 0) {
+    const a = rand(-2.6, -0.5) + (Math.random() < 0.5 ? 0 : Math.PI + 1.2);
+    burst(C.x + Math.cos(a) * 120, C.y + Math.sin(a) * 110, '#ff8a5c', 18, 5, 40);
+    G.shake = Math.max(G.shake, 6);
+  }
+  if (f >= 4 && f < 12) G.shake = Math.max(G.shake, 2 + (f - 4));
+  if (f >= 8 && G.tick % 3 === 0) burst(C.x, C.y + 20, '#fff0d8', 4, 7, 30);
+  if (t === CORE_DEATH_TOTAL) {
+    spawnGores(CORE_GORES, C.x, C.y + 20, 9);
+    playAnim('Wipe_Explosion', C.x, C.y + 20, 5, B.DEATH_EXPLOSION_SCALE);
+    burst(C.x, C.y + 20, '#e05ad6', 120, 12, 90);
+    G.shake = 30;
+    setState('dead');
+  }
+}
+
+function killPlayer(reason) {
+  if (P.dead) return;
+  P.dead = true; P.deathReason = reason;
+  burst(P.x + P.w / 2, P.y + P.h / 2, '#ff5464', 40, 6, 60);
+  G.endTimer = reason === 'wipe' ? 70 : 90;
+}
+
+function hurt(dmg) {
+  if (P.dead || P.iframes > 0 || opt.god) return;
+  P.hp -= dmg;
+  P.iframes = B.PLAYER_IFRAMES;
+  floatText(P.x + P.w / 2, P.y - 6, fmt(dmg), '#ff5464', 16);
+  G.shake = Math.max(G.shake, 5);
+  if (P.hp <= 0) { P.hp = 0; killPlayer('hp'); }
+}
+
+// O núcleo flutua entre pontos sorteados; para o laser vertical, alinha com o jogador e para.
+function updateCoreMotion() {
+  if (C.state !== 'wipe' && C.state !== 'dead' && C.state !== 'dying') {
+    if (C.pillar && C.pillar.phase === 'aim') {
+      C.bx = lerp(C.bx, clamp(pc().x, S * 0.12, S * 0.88), 0.06);
+      if (++C.pillar.t >= B.PILLAR_AIM) {
+        C.pillar.phase = 'beam';
+        C.pillar.beam = makeLaser(C.bx, 0, Math.PI / 2, S, B.PILLAR_THICKNESS, B.PILLAR_DAMAGE, B.PILLAR_TELEGRAPH, B.PILLAR_FIRE);
+      }
+    } else if (C.pillar) {
+      if (C.pillar.beam.done) { C.pillar = null; C.dest.x = C.bx; }
+    } else {
+      if (--C.moveT <= 0) {
+        C.moveT = B.CORE_MOVE_INTERVAL;
+        C.dest = { x: rand(S * 0.27, S * 0.73), y: rand(S * 0.26, S * 0.42) };
+      }
+      C.bx = lerp(C.bx, C.dest.x, B.CORE_MOVE_LERP);
+      C.by = lerp(C.by, C.dest.y, B.CORE_MOVE_LERP);
+    }
+  }
+  C.x = C.bx;
+  C.y = C.by + Math.sin(G.tick * 0.025) * 10;
+}
+
+function updateCore() {
+  C.t++;
+  updateCoreMotion();
+  C.alpha = Math.min(1, C.alpha + 1 / 60);
+  if (C.flash > 0) C.flash--;
+  if (G.immuneCd > 0) G.immuneCd--;
+  switch (C.state) {
+    case 'intro': if (C.t >= B.INTRO_TIME) beginCycle(); break;
+    case 'test': if (--C.testT <= 0) testTimeout(); break;
+    case 'lock':
+      if (C.t >= B.LOCK_TIME) {
+        if (C.q < 3) beginCycle();
+        else {
+          setState('finalintro'); C.finalIdx = 0;
+          toast('25% finais', '#e05ad6', 300);
+          toast('Conclua as três mãos, uma de cada vez.', '#e05ad6', 300, true);
+        }
+      }
+      break;
+    case 'finalintro': if (C.t >= B.FINAL_INTRO_TIME) beginCycle(); break;
+    case 'revealopen': if (C.t >= 32) setState('exposedfinal'); break;
+    case 'wipe': {
+      const et = C.t - B.WIPE_CHARGE;
+      if (et < 0 && !reducedMotion) G.shake = Math.max(G.shake, 2 + 8 * (C.t / B.WIPE_CHARGE));
+      if (et === 0) G.shake = 34;
+      if (et === 15) killPlayer('wipe');
+      break;
+    }
+    case 'dying': updateDeath(); break;
+    case 'dead': if (C.t === 150) showEnd('win'); break;
+  }
+}
+
+function coreSprite() {
+  const loop = Math.floor(G.tick / 7) % 8, t = C.t;
+  switch (C.state) {
+    case 'intro': return ['Core', loop];
+    case 'await': case 'test': case 'buffready': case 'chestready': return [CORE_SYMBOL[C.target], loop];
+    case 'exposed': return ['Core_ChestBroken', loop];
+    case 'lock': case 'chestfinal': return ['Core_Shielded', loop];
+    case 'finalintro': {
+      const end = B.FINAL_INTRO_TIME;
+      if (t < 32) return ['Core_Reveal', Math.floor(t / 8)];
+      if (t < end - 32) return ['Core_Reveal', 4 + loop % 4];
+      return ['Core_Reveal', clamp(3 - Math.floor((t - (end - 32)) / 8), 0, 3)];
+    }
+    case 'revealopen': return ['Core_Reveal', Math.min(3, Math.floor(t / 8))];
+    case 'exposedfinal': return ['Core_Reveal', 4 + loop % 4];
+    case 'dying': return ['Core_Death', coreDeathFrame(t)];
+    case 'wipe': return ['Core_Wipe', Math.min(7, Math.floor(t * 8 / B.WIPE_CHARGE))];
+  }
+  return ['Core', loop];
+}
+const coreRect = () => ({ x: C.x - 80, y: C.y - 70, w: 160, h: 200 });
+
+// ============================================================
+// Mãos
+// ============================================================
+function handGeom(h) {
+  const e = easeOut(h.emerge);
+  if (h.kind === ABYSS) {
+    const top = S - 292 + (1 - e) * 330;
+    return { cx: AX, cy: top + 154, rect: { x: AX - 58, y: top, w: 116, h: Math.max(0, S - top) }, palm: { x: AX, y: top + 95 } };
+  }
+  if (h.kind === CELESTIAL) {
+    const bot = 292 - (1 - e) * 330;
+    return { cx: CX, cy: bot - 154, rect: { x: CX - 58, y: 0, w: 116, h: Math.max(0, bot) }, palm: { x: CX, y: bot - 95 } };
+  }
+  const off = (1 - e) * 340;
+  if (h.side < 0) {
+    const left = -40 - off;
+    return { cx: left + 154, cy: h.y, flip: false, rect: { x: 0, y: h.y - 58, w: Math.max(0, left + 290), h: 116 }, lens: { x: left + 163, y: h.y } };
+  }
+  const right = S + 40 + off;
+  return { cx: right - 154, cy: h.y, flip: true, rect: { x: Math.min(S, right - 290), y: h.y - 58, w: Math.max(0, S - (right - 290)), h: 116 }, lens: { x: right - 163, y: h.y } };
+}
+const handHittable = h => !h.destroyed && !h.dying && h.emerge > 0.9;
+
+function updateHands() {
+  for (const h of G.hands) {
+    h.anim++;
+    if (h.flash > 0) h.flash--;
+    if (h.procT > 0 && --h.procT === 0) h.proc = 0;
+    if (h.cast > 0) h.cast--;
+    if (h.dying > 0) {
+      // racha com luz (Hand_*_Death); no fim, explosão colorida do braço e gores
+      const g = handGeom(h);
+      if (G.tick % 3 === 0) burst(g.cx + rand(-50, 50), g.cy + rand(-50, 50), COLORS[h.kind], 3, 3, 30);
+      if (--h.dying === 0) {
+        h.destroyed = true;
+        playAnim(ARM_EXPLOSION[h.kind], g.cx, g.cy, 4, 1.5);
+        spawnGores(HAND_GORES, g.cx, g.cy, 6);
+        G.shake = Math.max(G.shake, 8);
+      }
+    } else if (!h.destroyed && C.state !== 'wipe') {
+      h.emerge = Math.min(1, h.emerge + 1 / 70);
+    }
+    if (h.kind === VOID && h.laser) {
+      const L = h.laser;
+      if (L.phase === 'aim') {
+        h.y = lerp(h.y, clamp(pc().y, 150, S - 150), 0.1);
+        if (++L.t >= B.LASER_AIM) {
+          const g = handGeom(h);
+          L.phase = 'beam';
+          L.beam = h.side < 0
+            ? makeLaser(g.lens.x, h.y, 0, S - g.lens.x, B.HAND_LASER_THICKNESS, B.LASER_DAMAGE)
+            : makeLaser(g.lens.x, h.y, Math.PI, g.lens.x, B.HAND_LASER_THICKNESS, B.LASER_DAMAGE);
+        }
+      } else if (L.beam && L.beam.done) h.laser = null;
+    } else if (h.kind === VOID && !h.dying) {
+      h.y = lerp(h.y, h.baseY, 0.02);
+    }
+  }
+}
+
+function handFrame(h) {
+  const idle = Math.floor(h.anim / 10) % 4, act = 4 + Math.floor(h.anim / 7) % 4;
+  const testing = (C.state === 'test' || C.state === 'buffready') && C.target === h.kind;
+  if (h.kind === ABYSS) return (testing || h.cast > 0) ? act : idle;
+  if (h.kind === CELESTIAL) return (testing || h.cast > 0) ? act : idle;
+  if (h.laser) {
+    if (h.laser.phase === 'aim') return 4;
+    const b = h.laser.beam;
+    if (b.phase === 'tele') return 4 + Math.min(2, Math.floor(b.t / B.LASER_TELEGRAPH * 3));
+    return 7;
+  }
+  return idle;
+}
+
+// ============================================================
+// Teste do Abismo
+// ============================================================
+function setupAbyss() {
+  const cx = AX, cy = S - 292 - 22 - ABYSS_C * 32;
+  const blocks = [];
+  ABYSS_PATTERN.forEach((row, gy) => [...row].forEach((c, gx) => {
+    if (c === 'X') blocks.push({ gx, gy, x: cx + (gx - ABYSS_C) * 32, y: cy + (gy - ABYSS_C) * 32, hits: 0, alive: true, reform: 0, flash: 0 });
+  }));
+  G.abyss = { cx, cy, blocks, emitter: { hits: 0, alive: true, flash: 0 }, aura: 'off', auraT: 90, closing: 0 };
+}
+
+function emitterReachable() {
+  const A = G.abyss;
+  const solid = new Set(A.blocks.filter(b => b.alive).map(b => b.gx + ',' + b.gy));
+  const seen = new Set(), q = [];
+  const last = ABYSS_N - 1;
+  for (let i = 0; i < ABYSS_N; i++) for (const [x, y] of [[i, 0], [i, last], [0, i], [last, i]]) {
+    const k = x + ',' + y;
+    if (!solid.has(k) && !seen.has(k)) { seen.add(k); q.push([x, y]); }
+  }
+  while (q.length) {
+    const [x, y] = q.shift();
+    if (x === ABYSS_C && y === ABYSS_C) return true;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = x + dx, ny = y + dy, k = nx + ',' + ny;
+      if (nx < 0 || ny < 0 || nx > last || ny > last || seen.has(k) || solid.has(k)) continue;
+      seen.add(k); q.push([nx, ny]);
+    }
+  }
+  return false;
+}
+
+function hitBlock(b) {
+  b.flash = 6;
+  if (G.abyss.aura === 'on') {
+    burst(b.x, b.y, '#f4b6ef', 3, 2, 12);
+    if (G.immuneCd <= 0) { G.immuneCd = 20; floatText(b.x, b.y - 20, 'IMUNE', '#f4b6ef', 13); }
+    return;
+  }
+  b.hits++;
+  if (b.hits >= B.ABYSS_BLOCK_HITS) { b.alive = false; burst(b.x, b.y, '#e05ad6', 12, 4, 30); }
+}
+
+function hitEmitter() {
+  const A = G.abyss, e = A.emitter;
+  if (!emitterReachable()) return;
+  if (A.aura !== 'off') {
+    if (G.immuneCd <= 0) { G.immuneCd = 20; floatText(A.cx, A.cy - 24, 'aura ativa', '#e05ad6', 14); }
+    return;
+  }
+  e.flash = 6; e.hits++;
+  floatText(A.cx, A.cy - 24, `${e.hits}/${B.ABYSS_EMITTER_HITS}`, '#f4b6ef', 14);
+  if (e.hits >= B.ABYSS_EMITTER_HITS) { e.alive = false; grantSeal(ABYSS, A.cx, A.cy); }
+}
+
+function updateAbyss() {
+  const A = G.abyss;
+  if (!A) return;
+  for (const b of A.blocks) { if (b.flash > 0) b.flash--; if (b.reform > 0) b.reform--; }
+  if (A.emitter.flash > 0) A.emitter.flash--;
+  if (A.closing > 0) { if (--A.closing === 0) G.abyss = null; return; }
+  if (C.state !== 'test') return;
+  if (--A.auraT <= 0) {
+    if (A.aura === 'off') { A.aura = 'warn'; A.auraT = B.AURA_WARN; }
+    else if (A.aura === 'warn') { A.aura = 'on'; A.auraT = B.AURA_ON; }
+    else { A.aura = 'off'; A.auraT = B.AURA_OFF; }
+  }
+  if (A.aura === 'on') {
+    const p = pc();
+    if (dist(p.x, p.y, A.cx, A.cy) < B.AURA_RADIUS + 8) hurt(B.AURA_DAMAGE);
+  }
+}
+
+function drawAbyss() {
+  const A = G.abyss;
+  if (!A) return;
+  const fade = A.closing > 0 ? Math.min(1, A.closing / 30) : 1;
+  ctx.save(); ctx.globalAlpha = fade;
+  for (const b of A.blocks) {
+    if (b.reform > 0) spr('Abyss_SealBlock_Reform', Math.floor((36 - b.reform) / 6), b.x, b.y);
+    else if (b.alive) {
+      spr('Abyss_SealBlock', b.hits, b.x, b.y);
+      if (b.flash) { ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.fillRect(b.x - 16, b.y - 16, 32, 32); }
+    }
+  }
+  if (A.emitter.alive) {
+    const f = A.aura === 'off' ? Math.floor(G.tick / 15) % 2 : A.aura === 'warn' ? 2 + Math.floor(G.tick / 6) % 2 : 4 + Math.floor(G.tick / 6) % 4;
+    spr('Abyss_Emitter', f, A.cx, A.cy);
+    if (A.emitter.flash) { ctx.fillStyle = 'rgba(255,255,255,0.45)'; ctx.fillRect(A.cx - 16, A.cy - 16, 32, 32); }
+  }
+  const auraScale = B.AURA_RADIUS * 2 / 192;
+  if (A.aura === 'warn') spr('Abyss_Aura', Math.floor(G.tick / 8) % 2, A.cx, A.cy, { scale: auraScale, alpha: 0.8 });
+  if (A.aura === 'on') spr('Abyss_Aura', 2 + Math.floor(G.tick / 6) % 4, A.cx, A.cy, { scale: auraScale, alpha: 0.9 });
+  ctx.restore();
+}
+
+// ============================================================
+// Teste do Vácuo
+// ============================================================
+function setupVoid() {
+  const n = clamp(B.VOID_SEQUENCE_LENGTH, 1, 5);
+  const seq = Array.from({ length: n }, () => Math.floor(Math.random() * 6));
+  let shapes;
+  do { shapes = seq.map(() => Math.floor(Math.random() * 6)); }
+  while (shapes.filter((s, i) => s === seq[i]).length > Math.max(0, n - 3));
+  const sp = B.VOID_TILE_SPACING, x0 = S / 2 - (n - 1) * sp / 2 - 8;
+  const px = S / 2 - 56, py = S - 196;
+  G.voidT = {
+    seq, px, py,
+    tiles: shapes.map((shape, i) => ({ x: x0 + i * sp, y: S - 124, shape, flash: 0 })),
+    lock: { x: x0 + (n - 1) * sp + 8 + sp, y: S - 116, hits: 0, unlocked: false, flash: 0 },
+  };
+}
+const tileMatch = (V, i) => V.tiles[i].shape === V.seq[i];
+
+function hoveredTile() {
+  const V = G.voidT;
+  if (!V || C.state !== 'test') return null;
+  const hb = B.VOID_TILE_HITBOX;
+  for (const t of V.tiles) if (pointIn({ x: t.x + 8 - hb / 2, y: t.y + 8 - hb / 2, w: hb, h: hb }, mouse.wx, mouse.wy)) return t;
+  return null;
+}
+
+function hammer(t, dir) {
+  const p = pc();
+  if (dist(p.x, p.y, t.x + 8, t.y + 8) > B.HAMMER_REACH) {
+    if (G.immuneCd <= 0) { G.immuneCd = 20; floatText(t.x + 8, t.y - 6, 'longe demais', '#bdb3e6', 13); }
+    return;
+  }
+  t.shape = (t.shape + dir + 6) % 6;
+  t.flash = 8;
+  P.hammerFx = 10;
+  burst(t.x + 8, t.y + 8, '#9fc8ff', 6, 2.5, 20);
+  const V = G.voidT;
+  if (V.tiles.every((_, i) => tileMatch(V, i))) {
+    V.lock.unlocked = true;
+    setState('buffready');
+    toast('A trava do Vácuo destravou.', COLORS[VOID]);
+  }
+}
+
+function hitLock() {
+  const L = G.voidT.lock;
+  L.flash = 6;
+  if (!L.unlocked) {
+    if (G.immuneCd <= 0) { G.immuneCd = 20; floatText(L.x, L.y - 24, 'travada', '#bdb3e6', 13); }
+    return;
+  }
+  L.hits++;
+  if (L.hits >= B.VOID_LOCK_HITS) grantSeal(VOID, L.x, L.y);
+}
+
+// formatos: 0 cheio · 1 meio bloco · 2 rampa embaixo-esq. · 3 embaixo-dir. · 4 em cima-esq. · 5 em cima-dir.
+const SHAPE_POLY = [
+  [[0, 0], [16, 0], [16, 16], [0, 16]],
+  [[0, 8], [16, 8], [16, 16], [0, 16]],
+  [[0, 0], [0, 16], [16, 16]],
+  [[16, 0], [16, 16], [0, 16]],
+  [[0, 0], [16, 0], [0, 16]],
+  [[0, 0], [16, 0], [16, 16]],
+];
+function drawVoid() {
+  const V = G.voidT;
+  if (!V) return;
+  // linhas finas ligam cada espaço do painel ao seu bloco
+  ctx.save();
+  ctx.strokeStyle = 'rgba(90,166,255,0.28)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([3, 3]);
+  V.tiles.forEach((t, i) => {
+    ctx.beginPath();
+    ctx.moveTo(V.px + 14 + 20 * i, V.py + 28);
+    ctx.lineTo(t.x + 8, t.y - 4);
+    ctx.stroke();
+  });
+  ctx.restore();
+  ctx.drawImage(IMG.Void_Panel, V.px, V.py);
+  V.seq.forEach((s, i) => spr('Void_ShapeGlyph', s + (tileMatch(V, i) ? 6 : 0), V.px + 6 + 20 * i, V.py + 6, { ox: 0, oy: 0 }));
+  const hov = hoveredTile();
+  V.tiles.forEach((t, i) => {
+    if (t.flash > 0) t.flash--;
+    ctx.save();
+    ctx.translate(t.x, t.y);
+    ctx.beginPath();
+    SHAPE_POLY[t.shape].forEach(([x, y], j) => j ? ctx.lineTo(x, y) : ctx.moveTo(x, y));
+    ctx.closePath();
+    ctx.save(); ctx.clip();
+    ctx.drawImage(IMG.Void_PuzzleTile, 0, 0, 16, 16, 0, 0, 16, 16);
+    if (t.flash) { ctx.fillStyle = 'rgba(255,255,255,0.4)'; ctx.fillRect(0, 0, 16, 16); }
+    ctx.restore();
+    ctx.restore();
+    if (tileMatch(V, i)) spr('Void_MatchGlow', t.shape, t.x, t.y, { ox: 0, oy: 0, add: true, alpha: 0.7 + 0.3 * Math.sin(G.tick * 0.15) });
+    if (t === hov) { ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 1; ctx.strokeRect(t.x - 4.5, t.y - 4.5, 25, 25); }
+  });
+  const L = V.lock;
+  if (L.flash > 0) L.flash--;
+  spr('Void_BuffLock', L.unlocked ? 2 + Math.floor(G.tick / 6) % 4 : Math.floor(G.tick / 20) % 2, L.x, L.y);
+  if (L.flash) { ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.fillRect(L.x - 16, L.y - 16, 32, 32); }
+}
+
+// ============================================================
+// Teste Celeste
+// ============================================================
+function setupCelestial() {
+  const rings = [];
+  const blocked = (x, y) =>
+    dist(x, y, C.x, C.y) < 200 ||
+    (Math.abs(x - CX) < 120 && y < 360) ||
+    (Math.abs(x - AX) < 150 && y > S - 560);
+  let prev = pc();
+  for (let i = 0; i < B.RING_COUNT; i++) {
+    let x, y, tries = 0;
+    do {
+      x = rand(140, S - 140); y = rand(140, S - 200); tries++;
+      const d = dist(x, y, prev.x, prev.y);
+      if (tries > 400) break;
+      if (blocked(x, y) || d < 260 || d > 700 || rings.some(r => dist(r.x, r.y, x, y) < 200)) continue;
+      break;
+    } while (true);
+    rings.push({ x, y, passed: false, passT: 0 });
+    prev = { x, y };
+  }
+  G.cel = { rings, next: 0, block: null, batCd: 60 };
+}
+
+function updateCelestial() {
+  const K = G.cel;
+  if (!K) return;
+  for (const r of K.rings) if (r.passed) r.passT++;
+  if (C.state === 'test' && K.next < K.rings.length) {
+    const r = K.rings[K.next], p = pc();
+    if (dist(p.x, p.y, r.x, r.y) < B.RING_RADIUS + 10) {
+      r.passed = true; K.next++;
+      burst(r.x, r.y, COLORS[CELESTIAL], 16, 4, 30);
+      if (K.next === K.rings.length) {
+        K.block = { x: CX, y: 380, t: 0, hits: 0, flash: 0 };
+        setState('buffready');
+        toast('O bloco Celeste surgiu.', COLORS[CELESTIAL]);
+      }
+    }
+  }
+  if (K.block) { K.block.t++; if (K.block.flash > 0) K.block.flash--; }
+  if (--K.batCd <= 0) {
+    K.batCd = B.BAT_INTERVAL;
+    const p = pc(), a = Math.random() * Math.PI * 2;
+    G.bats.push({ x: clamp(p.x + Math.cos(a) * 260, 60, S - 60), y: clamp(p.y + Math.sin(a) * 200, 60, S - 80), t: 0 });
+  }
+}
+
+function hitCelestialBlock() {
+  const b = G.cel.block;
+  if (b.t < 24) return;
+  b.flash = 6; b.hits++;
+  if (b.hits >= B.CELESTIAL_BLOCK_HITS) grantSeal(CELESTIAL, b.x, b.y);
+}
+
+function drawCelestial() {
+  const K = G.cel;
+  if (!K) return;
+  K.rings.forEach((r, i) => {
+    if (r.passed) {
+      const a = r.passT > 24 ? 1 - (r.passT - 24) / 30 : 1;
+      if (a > 0) spr('Celestial_Ring', 5 + Math.min(3, Math.floor(r.passT / 6)), r.x, r.y, { alpha: a });
+    } else if (i === K.next) spr('Celestial_Ring', Math.floor(G.tick / 8) % 4, r.x, r.y);
+    else spr('Celestial_Ring', 4, r.x, r.y, { alpha: 0.85 });
+  });
+  if (K.block) {
+    const b = K.block;
+    spr('Celestial_BuffBlock', b.t < 24 ? Math.floor(b.t / 6) : 4 + Math.floor(G.tick / 7) % 4, b.x, b.y);
+    if (b.flash) { ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.fillRect(b.x - 16, b.y - 16, 32, 32); }
+  }
+}
+
+function drawRingArrow() {
+  const K = G.cel;
+  if (!K || P.dead || C.state !== 'test' || K.next >= K.rings.length) return;
+  const r = K.rings[K.next], p = pc(), a = Math.atan2(r.y - p.y, r.x - p.x);
+  spr('Celestial_RingArrow', 0, p.x + Math.cos(a) * 46, p.y + Math.sin(a) * 46, { rot: a });
+}
+
+// ============================================================
+// Ataques
+// ============================================================
+function spawnOrbs(x, y, speed = B.ORB_SPEED) {
+  const p = pc(), a = Math.atan2(p.y - y, p.x - x);
+  G.orbs.push({ cx: x, cy: y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, t: 0, ang: Math.random() * 6, pos: [] });
+}
+function spawnStar(x, y) {
+  const p = pc(), a = Math.atan2(p.y - y, p.x - x);
+  G.starsP.push({ x, y, vx: Math.cos(a) * 4, vy: Math.sin(a) * 4, t: 0, old: [] });
+}
+// laser: origem (ox, oy), ângulo 0 / π (horizontal) ou π/2 (vertical), comprimento e espessura
+function makeLaser(ox, oy, angle, len, thick, dmg, tele = B.LASER_TELEGRAPH, fire = B.LASER_FIRE) {
+  const L = { ox, oy, angle, len, thick, dmg, tele, fire, phase: 'tele', t: 0 };
+  G.lasers.push(L);
+  return L;
+}
+function laserHits(L, r) {
+  const half = B.LASER_HALF_WIDTH * L.thick;
+  const ex = L.ox + Math.cos(L.angle) * L.len, ey = L.oy + Math.sin(L.angle) * L.len;
+  const xa = Math.min(L.ox, ex) - half, xb = Math.max(L.ox, ex) + half;
+  const ya = Math.min(L.oy, ey) - half, yb = Math.max(L.oy, ey) + half;
+  return r.x + r.w > xa && r.x < xb && r.y + r.h > ya && r.y < yb;
+}
+function spawnCoreLaser() {
+  makeLaser(0, clamp(pc().y, 40, S - 30), 0, S, B.HAND_LASER_THICKNESS, B.LASER_DAMAGE);
+}
+function startPillar() {
+  if (!C.pillar) C.pillar = { phase: 'aim', t: 0 };
+}
+
+function handAttacks() {
+  const s = C.state;
+  if (s !== 'await' && s !== 'test' && s !== 'buffready' && s !== 'chestready') return;
+  if (--C.pillarCd <= 0) { C.pillarCd = B.PILLAR_COOLDOWN; startPillar(); }
+  for (const k of [ABYSS, CELESTIAL, VOID]) {
+    if (k === C.target || !kindAlive(k)) continue;
+    if (--G.cd[k] > 0) continue;
+    if (k === ABYSS) {
+      G.cd[k] = B.HAND_ORB_COOLDOWN;
+      const h = handsOf(ABYSS)[0];
+      h.cast = 40;
+      spawnOrbs(clamp(pc().x + rand(-160, 160), 90, S - 90), 40, B.ORB_SKY_SPEED);
+    } else if (k === CELESTIAL) {
+      G.cd[k] = B.HAND_STAR_COOLDOWN;
+      const h = handsOf(CELESTIAL)[0], g = handGeom(h);
+      h.cast = 60; spawnStar(g.palm.x, g.palm.y);
+    } else {
+      G.cd[k] = B.HAND_LASER_COOLDOWN;
+      const vh = handsOf(VOID), h = vh[G.voidNext++ % 2];
+      if (!h.laser) h.laser = { phase: 'aim', t: 0 };
+    }
+  }
+}
+
+function coreAttacks() {
+  const s = C.state;
+  const finalStand = s === 'chestfinal' || s === 'revealopen' || s === 'exposedfinal';
+  if (s !== 'exposed' && !finalStand) return;
+  if (--C.attackCd > 0) return;
+  C.attackCd = Math.round(B.CORE_ATTACK_COOLDOWN / (finalStand ? B.FINAL_STAND_MULTIPLIER : 1));
+  const i = C.attackIdx++ % 4;
+  if (i === 0) spawnCoreLaser();
+  if (i === 1) spawnOrbs(C.x, C.y + 30);
+  if (i === 2) spawnStar(C.x, C.y + 10);
+  if (i === 3) startPillar();
+}
+
+function updateAttacks() {
+  const pr = { x: P.x, y: P.y, w: P.w, h: P.h };
+  // lasers: aviso, depois o feixe; acerto = linha horizontal contra a caixa do jogador
+  for (const L of G.lasers) {
+    L.t++;
+    if (L.phase === 'tele' && L.t >= L.tele) { L.phase = 'fire'; L.t = 0; G.shake = Math.max(G.shake, L.thick > 2 ? 14 : 6); }
+    else if (L.phase === 'fire') {
+      if (!P.dead && laserHits(L, pr)) hurt(L.dmg);
+      if (L.t >= L.fire) L.done = true;
+    }
+  }
+  G.lasers = G.lasers.filter(L => !L.done);
+
+  for (const o of G.orbs) {
+    o.t++; o.cx += o.vx; o.cy += o.vy; o.ang += 0.055;
+    const r = Math.min(B.ORB_RADIUS, o.t * 1.4);
+    o.pos = [];
+    for (let i = 0; i < B.ORB_COUNT; i++) {
+      const a = o.ang + i * Math.PI * 2 / B.ORB_COUNT;
+      const x = o.cx + Math.cos(a) * r, y = o.cy + Math.sin(a) * r;
+      o.pos.push([x, y]);
+      if (o.t < B.ORB_LIFE - 20 && circleRect(x, y, 16 * B.ATTACK_SCALE, pr)) hurt(B.ORB_DAMAGE);
+    }
+  }
+  G.orbs = G.orbs.filter(o => o.t < B.ORB_LIFE);
+
+  const p = pc();
+  for (const s of G.starsP) {
+    s.t++;
+    const a = Math.atan2(p.y - s.y, p.x - s.x);
+    const k = B.STAR_HOMING * Math.max(0, 1 - s.t / (B.STAR_LIFE * 0.7));
+    s.vx = lerp(s.vx, Math.cos(a) * B.STAR_SPEED, k);
+    s.vy = lerp(s.vy, Math.sin(a) * B.STAR_SPEED, k);
+    s.x += s.vx; s.y += s.vy;
+    s.old.unshift({ x: s.x, y: s.y });
+    if (s.old.length > 12) s.old.pop();
+    if (s.t < B.STAR_LIFE - 25 && circleRect(s.x, s.y, 26 * B.ATTACK_SCALE, pr)) hurt(B.STAR_DAMAGE);
+  }
+  G.starsP = G.starsP.filter(s => s.t < B.STAR_LIFE);
+
+  // morcegos: aparece 0-2, voa 3-6, ataca 7-9 (dispara no 9), some 10-12
+  const A0 = 18, A1 = A0 + B.BAT_FLY_TIME, A2 = A1 + 21, A3 = A2 + 18;
+  for (const b of G.bats) {
+    b.t++;
+    if (b.t > A0 && b.t <= A1) {
+      const tx = p.x + (b.x < p.x ? -170 : 170), ty = p.y - 110;
+      const a = Math.atan2(ty - b.y, tx - b.x);
+      b.x += Math.cos(a) * 2.6; b.y += Math.sin(a) * 2.6;
+    }
+    if (b.t === A1 + 14) {
+      const a = Math.atan2(p.y - b.y, p.x - b.x);
+      G.bolts.push({ x: b.x, y: b.y, vx: Math.cos(a) * B.BOLT_SPEED, vy: Math.sin(a) * B.BOLT_SPEED, t: 0 });
+    }
+    b.frame = b.t <= A0 ? Math.floor(b.t / 6) : b.t <= A1 ? 3 + Math.floor(b.t / 6) % 4 : b.t <= A2 ? 7 + Math.min(2, Math.floor((b.t - A1) / 7)) : 10 + Math.min(2, Math.floor((b.t - A2) / 6));
+    b.flip = p.x < b.x;
+  }
+  G.bats = G.bats.filter(b => b.t < A3);
+  for (const o of G.bolts) {
+    o.t++; o.x += o.vx; o.y += o.vy;
+    if (circleRect(o.x, o.y, 8 * B.ATTACK_SCALE, pr)) { hurt(B.BOLT_DAMAGE); o.t = 999; }
+  }
+  G.bolts = G.bolts.filter(o => o.t < 180 && o.x > -20 && o.x < S + 20 && o.y > -20 && o.y < S + 20);
+}
+
+function drawLaser(L) {
+  const len = L.len;
+  ctx.save();
+  ctx.translate(L.ox, L.oy);
+  ctx.rotate(L.angle);
+  ctx.scale(1, L.thick);
+  if (L.phase === 'tele') {
+    ctx.globalAlpha = 0.35 + 0.35 * Math.sin(L.t * 0.4);
+    const f = Math.floor(L.t / 6) % 2;
+    for (let x = 0; x < len; x += 16) ctx.drawImage(IMG.Void_LaserTelegraph, 0, f * 40, 16, 40, x, -20, 16, 40);
+  } else {
+    const f = Math.floor(L.t / 4) % 4;
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.drawImage(IMG.Void_LaserStart, 0, f * 40, 32, 40, 0, -20, 32, 40);
+    for (let x = 32; x < len - 24; x += 16) ctx.drawImage(IMG.Void_LaserBody, 0, f * 40, 16, 40, x, -20, Math.min(16, len - 24 - x), 40);
+    ctx.drawImage(IMG.Void_LaserEnd, 0, f * 40, 24, 40, len - 24, -20, 24, 40);
+  }
+  ctx.restore();
+}
+
+function drawAttacks() {
+  for (const L of G.lasers) drawLaser(L);
+  for (const o of G.orbs) {
+    const a = o.t > B.ORB_LIFE - 30 ? (B.ORB_LIFE - o.t) / 30 : 1;
+    for (const [x, y] of o.pos || []) spr('Abyss_SpinOrb', Math.floor(G.tick / 5), x, y, { rot: G.tick * 0.12, alpha: a, add: true, scale: B.ATTACK_SCALE });
+  }
+  for (const s of G.starsP) {
+    const a = s.t > B.STAR_LIFE - 30 ? (B.STAR_LIFE - s.t) / 30 : 1;
+    s.old.forEach((q, i) => spr('Celestial_HomingStar', Math.floor(G.tick / 5), q.x, q.y, { alpha: a * 0.45 * (1 - i / 12), scale: (1 - i * 0.05) * B.ATTACK_SCALE, add: true, rot: s.t * 0.05 }));
+    spr('Celestial_HomingStar', Math.floor(G.tick / 5), s.x, s.y, { alpha: a, add: true, rot: s.t * 0.05, scale: B.ATTACK_SCALE });
+  }
+  for (const b of G.bats) spr('Celestial_Bat', b.frame, b.x, b.y, { flip: b.flip });
+  for (const o of G.bolts) spr('Celestial_BatBolt', Math.floor(o.t / 4), o.x, o.y, { rot: Math.atan2(o.vy, o.vx), add: true, scale: B.ATTACK_SCALE });
+}
+
+// ============================================================
+// Jogador
+// ============================================================
+function buildTargets() {
+  const t = [];
+  const A = G.abyss;
+  if (A && !A.closing) {
+    for (const b of A.blocks) if (b.alive) t.push({ r: { x: b.x - 16, y: b.y - 16, w: 32, h: 32 }, key: b, hit: () => hitBlock(b) });
+    if (A.emitter.alive) t.push({ r: { x: A.cx - 14, y: A.cy - 14, w: 28, h: 28 }, key: A.emitter, hit: hitEmitter });
+  }
+  if (G.voidT) { const L = G.voidT.lock; t.push({ r: { x: L.x - 16, y: L.y - 16, w: 32, h: 32 }, key: L, hit: hitLock }); }
+  if (G.cel && G.cel.block) { const b = G.cel.block; t.push({ r: { x: b.x - 16, y: b.y - 16, w: 32, h: 32 }, key: b, hit: hitCelestialBlock }); }
+  for (const h of G.hands) if (handHittable(h)) t.push({ r: handGeom(h).rect, key: h, hit: () => onHandHit(h) });
+  if (C.state !== 'dead' && C.state !== 'wipe' && C.state !== 'dying') t.push({ r: coreRect(), hit: coreHit });
+  return t;
+}
+
+function updatePlayer() {
+  if (P.dead) return;
+  const left = down('KeyA', 'ArrowLeft'), right = down('KeyD', 'ArrowRight');
+  const up = down('KeyW', 'Space', 'ArrowUp'), dn = down('KeyS', 'ArrowDown');
+  if (P.dashCd > 0) P.dashCd--;
+  if (P.dashQueued && P.dashCd <= 0) {
+    P.dashDir = P.dashQueued; P.dashT = B.DASH_TIME; P.dashCd = B.DASH_TIME + B.DASH_COOLDOWN;
+  }
+  P.dashQueued = 0;
+  if (P.dashT > 0) {
+    P.dashT--;
+    P.vx = P.dashDir * B.DASH_SPEED * (P.dashT > 5 ? 1 : 0.6);
+    P.trail.unshift({ x: P.x, y: P.y });
+    if (P.trail.length > 6) P.trail.pop();
+  } else {
+    P.trail.pop();
+    if (left) P.vx -= 0.6;
+    if (right) P.vx += 0.6;
+    if (!left && !right) P.vx *= P.onGround ? 0.78 : 0.95;
+    P.vx = clamp(P.vx, -B.RUN_SPEED, B.RUN_SPEED);
+  }
+  if (up && P.onGround && !P.upHeld) { P.vy = -B.JUMP_SPEED; P.onGround = false; }
+  else if (up && !P.onGround) {
+    if (P.flight > 0) { P.vy = Math.max(P.vy - B.FLY_THRUST, -B.FLY_MAX_SPEED); P.flight--; }
+    else P.vy = Math.min(P.vy, 2);
+  }
+  P.upHeld = up;
+  P.vy = Math.min(P.vy + B.GRAVITY + (dn ? 0.35 : 0), dn ? 16 : 12);
+  P.x = clamp(P.x + P.vx, 0, S - P.w);
+  P.y += P.vy;
+  if (P.y + P.h >= S) { P.y = S - P.h; P.vy = 0; P.onGround = true; P.flight = B.FLIGHT_TIME; }
+  else P.onGround = false;
+  if (P.y < 0) { P.y = 0; P.vy = 0; }
+
+  if (P.iframes > 0) P.iframes--;
+  if (P.potionCd > 0) P.potionCd--;
+  if (P.hammerFx > 0) P.hammerFx--;
+  P.hp = Math.min(B.PLAYER_LIFE, P.hp + B.PLAYER_REGEN / 60);
+  if (down('KeyQ') && P.potionCd <= 0 && P.hp < B.PLAYER_LIFE) {
+    P.hp = Math.min(B.PLAYER_LIFE, P.hp + B.POTION_HEAL);
+    P.potionCd = B.POTION_COOLDOWN;
+    floatText(P.x + P.w / 2, P.y - 6, '+' + B.POTION_HEAL, '#7dffa8', 16);
+  }
+
+  const p = pc();
+  P.face = mouse.wx >= p.x ? 1 : -1;
+  if (P.gunCd > 0) P.gunCd--;
+  if (P.swordCd > 0) P.swordCd--;
+  const tile = hoveredTile();
+  if (tile) {
+    if (mouse.lp) hammer(tile, 1);
+    if (mouse.rp) hammer(tile, -1);
+    return;
+  }
+  const aim = Math.atan2(mouse.wy - p.y, mouse.wx - p.x);
+  if (mouse.left && P.gunCd <= 0) {
+    const sx = p.x + Math.cos(aim) * 16, sy = p.y + Math.sin(aim) * 16;
+    if (opt.weapon === 1) {
+      P.gunCd = B.SHOTGUN_COOLDOWN;
+      const shot = new Set();   // peças e mãos já atingidas por este disparo
+      for (let i = 0; i < B.SHOTGUN_PELLETS; i++) {
+        const a = aim + (i / (B.SHOTGUN_PELLETS - 1) - 0.5) * B.SHOTGUN_SPREAD + rand(-0.03, 0.03), v = B.SHOTGUN_SPEED * rand(0.9, 1.1);
+        G.bullets.push({ x: sx, y: sy, vx: Math.cos(a) * v, vy: Math.sin(a) * v, t: 0, life: B.SHOTGUN_RANGE, dmg: B.SHOTGUN_DAMAGE, shot, pellet: true });
+      }
+      G.shake = Math.max(G.shake, 2);
+    } else {
+      P.gunCd = B.GUN_COOLDOWN;
+      G.bullets.push({ x: sx, y: sy, vx: Math.cos(aim) * B.GUN_SPEED, vy: Math.sin(aim) * B.GUN_SPEED, t: 0, life: 90, dmg: B.GUN_DAMAGE });
+    }
+  }
+  if (mouse.right && P.swordCd <= 0) {
+    P.swordCd = B.SWORD_COOLDOWN;
+    G.swingFx = { ang: aim, t: 0 };
+    for (const tg of buildTargets()) {
+      const nx = clamp(p.x, tg.r.x, tg.r.x + tg.r.w), ny = clamp(p.y, tg.r.y, tg.r.y + tg.r.h);
+      const d = dist(p.x, p.y, nx, ny);
+      if (d > B.SWORD_RANGE) continue;
+      let da = Math.abs(Math.atan2(ny - p.y, nx - p.x) - aim);
+      if (da > Math.PI) da = Math.PI * 2 - da;
+      if (d < 24 || da < 1.25) tg.hit(B.SWORD_DAMAGE);
+    }
+  }
+}
+
+function updateBullets() {
+  if (!G.bullets.length) return;
+  const targets = buildTargets();
+  for (const b of G.bullets) {
+    for (let step = 0; step < 2 && !b.dead; step++) {
+      b.x += b.vx / 2; b.y += b.vy / 2;
+      if (b.x < 0 || b.x > S || b.y < 0 || b.y > S) { b.dead = true; burst(b.x, b.y, '#cfc6ff', 3, 2, 12); break; }
+      for (const tg of targets) {
+        if (!pointIn(tg.r, b.x, b.y)) continue;
+        b.dead = true;
+        burst(b.x, b.y, '#fff2c4', 4, 2, 14);
+        if (b.shot && tg.key) { if (b.shot.has(tg.key)) break; b.shot.add(tg.key); }
+        tg.hit(b.dmg);
+        break;
+      }
+    }
+    if (++b.t > b.life) b.dead = true;
+  }
+  G.bullets = G.bullets.filter(b => !b.dead);
+}
+
+function drawPlayer() {
+  if (P.dead) return;
+  const x = Math.round(P.x), y = Math.round(P.y), p = pc();
+  P.trail.forEach((g, i) => {
+    ctx.fillStyle = `rgba(150,190,255,${0.35 * (1 - i / 6)})`;
+    ctx.fillRect(g.x + 2, g.y, 16, 42);
+  });
+  ctx.save();
+  if (P.iframes > 0 && Math.floor(G.tick / 4) % 2) ctx.globalAlpha = 0.45;
+  if (!P.onGround) {
+    const flap = Math.sin(G.tick * 0.5) * 7;
+    ctx.fillStyle = 'rgba(190,170,255,0.55)';
+    for (const sd of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(p.x, y + 16);
+      ctx.lineTo(p.x + sd * 22, y + 4 + flap);
+      ctx.lineTo(p.x + sd * 18, y + 26);
+      ctx.closePath(); ctx.fill();
+    }
+  }
+  ctx.fillStyle = '#2b2347'; ctx.fillRect(x + 4, y + 30, 5, 12); ctx.fillRect(x + 11, y + 30, 5, 12);
+  ctx.fillStyle = '#8f86c9'; ctx.fillRect(x + 2, y + 14, 16, 17);
+  ctx.fillStyle = '#f1d3b3'; ctx.fillRect(x + 4, y + 3, 12, 11);
+  ctx.fillStyle = '#4a3f80'; ctx.fillRect(x + 3, y, 14, 5);
+  ctx.fillStyle = '#16122a'; ctx.fillRect(P.face > 0 ? x + 12 : x + 6, y + 7, 2, 2);
+  const aim = Math.atan2(mouse.wy - p.y, mouse.wx - p.x);
+  ctx.translate(p.x, p.y);
+  ctx.rotate(aim);
+  ctx.fillStyle = P.hammerFx > 0 ? '#9fc8ff' : '#d8d2ee';
+  ctx.fillRect(4, -2, P.hammerFx > 0 ? 12 : 18, 4);
+  ctx.restore();
+  [...P.seals].forEach((k, i) => {
+    const a = G.tick * 0.05 + i * Math.PI * 2 / 3;
+    ctx.fillStyle = COLORS[k];
+    ctx.fillRect(p.x + Math.cos(a) * 26 - 2, p.y + Math.sin(a) * 26 - 2, 4, 4);
+  });
+  if (G.swingFx) {
+    const s = G.swingFx, k = s.t / 10;
+    ctx.save();
+    ctx.strokeStyle = `rgba(255,245,220,${0.85 * (1 - k)})`;
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, B.SWORD_RANGE * 0.8, s.ang - 1.2, s.ang - 1.2 + 2.4 * Math.min(1, k * 2));
+    ctx.stroke();
+    ctx.restore();
+    if (++s.t > 10) G.swingFx = null;
+  }
+}
+
+// ============================================================
+// Efeitos, câmera, laço
+// ============================================================
+function updateFx() {
+  for (const q of G.parts) { q.t++; q.x += q.vx; q.y += q.vy; q.vx *= 0.96; q.vy *= 0.96; }
+  G.parts = G.parts.filter(q => q.t < q.life);
+  for (const t of G.texts) { t.t++; t.y -= 0.7; }
+  G.texts = G.texts.filter(t => t.t < 60);
+  for (const t of G.toasts) t.t++;
+  G.toasts = G.toasts.filter(t => t.t < t.life);
+  const ch = handsOf(CELESTIAL)[0];
+  if (ch.cast > 0 || ((C.state === 'test' || C.state === 'buffready') && C.target === CELESTIAL && !ch.dying && !ch.destroyed)) {
+    if (G.tick % 9 === 0) { const g = handGeom(ch); G.crystals.push({ x: g.palm.x + rand(-60, 60), y: g.palm.y + rand(0, 30), vy: rand(0.6, 1.4), t: 0 }); }
+  }
+  for (const c of G.crystals) { c.t++; c.y += c.vy; }
+  G.crystals = G.crystals.filter(c => c.t < 90);
+  if (G.shake > 0) G.shake *= 0.88;
+  if (G.shake < 0.3) G.shake = 0;
+}
+
+function viewScale() { return clamp(ch / 900, 0.5, 2.4) * G.zoom; }
+function updateCamera() {
+  const z = viewScale(), p = pc();
+  const tx = p.x + (mouse.wx - p.x) * 0.15, ty = p.y + (mouse.wy - p.y) * 0.15;
+  G.cam.x = lerp(G.cam.x, tx, 0.12); G.cam.y = lerp(G.cam.y, ty, 0.12);
+  const hw = cw / 2 / z, hh = ch / 2 / z, m = 110;
+  G.cam.x = (S + 2 * m < hw * 2) ? S / 2 : clamp(G.cam.x, -m + hw, S + m - hw);
+  G.cam.y = (S + 2 * m < hh * 2) ? S / 2 : clamp(G.cam.y, -m + hh, S + m - hh);
+}
+function updateMouseWorld() {
+  const z = viewScale();
+  mouse.wx = (mouse.sx - cw / 2) / z + G.cam.x;
+  mouse.wy = (mouse.sy - ch / 2) / z + G.cam.y;
+}
+
+function update() {
+  G.tick++;
+  updateMouseWorld();
+  updatePlayer();
+  updateCore();
+  updateHands();
+  updateAbyss();
+  updateCelestial();
+  handAttacks();
+  coreAttacks();
+  updateAttacks();
+  updateBullets();
+  updateFx();
+  updateDebris();
+  updateCamera();
+  if (G.deathAt && G.tick >= G.deathAt) { G.deathAt = 0; if (C.state === 'chestfinal') startDeath(); }
+  if (!P.dead && C.state !== 'dead') G.time++;
+  if (G.endTimer > 0 && --G.endTimer === 0) showEnd(P.deathReason);
+  mouse.lp = mouse.rp = false;
+}
+
+// ---------- desenho ----------
+function arenaColor() {
+  switch (C.state) {
+    case 'await': case 'test': case 'buffready': case 'chestready': return COLORS[C.target];
+    case 'exposed': case 'exposedfinal': case 'revealopen': return '#ff5464';
+    case 'wipe': return '#ff2d44';
+    default: return '#cfc4ff';
+  }
+}
+
+function drawArena() {
+  ctx.fillStyle = 'rgba(14,10,32,0.55)';
+  ctx.fillRect(0, 0, S, S);
+  const W = 48;
+  for (let i = -W; i < S + W; i += 16) {
+    for (let j = 0; j < W; j += 16) {
+      for (const [x, y] of [[i, -W + j], [i, S + j], [-W + j, i], [S + j, i]]) {
+        if ((x >= 0 && x < S && y >= 0 && y < S)) continue;
+        const v = ((x * 7 + y * 13) >> 4) & 3;
+        ctx.fillStyle = ['#1b1533', '#211a3e', '#18122d', '#1e1838'][v];
+        ctx.fillRect(x, y, 16, 16);
+        ctx.fillStyle = 'rgba(255,255,255,0.04)';
+        ctx.fillRect(x, y, 16, 1);
+      }
+    }
+  }
+  ctx.save();
+  ctx.strokeStyle = arenaColor();
+  ctx.globalAlpha = 0.55 + 0.25 * Math.sin(G.tick * 0.05);
+  ctx.lineWidth = 2;
+  ctx.shadowColor = arenaColor(); ctx.shadowBlur = 14;
+  ctx.strokeRect(-1, -1, S + 2, S + 2);
+  ctx.restore();
+}
+
+function drawStars() {
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = '#07060f';
+  ctx.fillRect(0, 0, cw, ch);
+  const g = ctx.createRadialGradient(cw * 0.5, ch * 0.4, 0, cw * 0.5, ch * 0.4, Math.max(cw, ch) * 0.7);
+  g.addColorStop(0, 'rgba(60,30,90,0.35)'); g.addColorStop(1, 'rgba(7,6,15,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, cw, ch);
+  for (const s of stars) {
+    const x = ((s.x * cw - G.cam.x * s.p) % cw + cw) % cw, y = ((s.y * ch - G.cam.y * s.p) % ch + ch) % ch;
+    ctx.fillStyle = `rgba(230,225,255,${s.b * (0.7 + 0.3 * Math.sin(G.tick * 0.03 + s.x * 50))})`;
+    ctx.fillRect(x, y, s.s, s.s);
+  }
+}
+
+function drawHands() {
+  for (const h of G.hands) {
+    if (h.destroyed) continue;
+    const g = handGeom(h);
+    const name = HAND_SPRITE[h.kind];
+    if (h.dying) {
+      const k = B.HAND_DEATH_TIME - h.dying, f = Math.min(5, Math.floor(k * 6 / B.HAND_DEATH_TIME));
+      const j = 1 + k / 12;
+      spr(name + '_Death', f, g.cx + rand(-j, j), g.cy + rand(-j, j), { flip: g.flip });
+      continue;
+    }
+    spr(name, handFrame(h), g.cx, g.cy, { flip: g.flip });
+    const glow = (h.flash ? 0.3 : 0) + 0.12 * h.proc;
+    if (glow) spr(name, handFrame(h), g.cx, g.cy, { flip: g.flip, alpha: glow, add: true });
+  }
+  for (const c of G.crystals) spr('Celestial_Crystal', Math.floor(c.t / 6), c.x, c.y, { alpha: 1 - c.t / 90, add: true });
+}
+
+function drawCore() {
+  if (C.state === 'dead') return;
+  const [name, f] = coreSprite();
+  const a = C.alpha;
+  let x = C.x, y = C.y;
+  if (C.state === 'dying' && f >= 4) { const j = 2 + (f - 4) * 0.5; x += rand(-j, j); y += rand(-j, j); }
+  spr(name, f, x, y, { alpha: a });
+  if (C.flash) spr(name, f, x, y, { alpha: 0.25 * a, add: true });
+}
+
+function updateDebris() {
+  for (const n of G.anims) n.t++;
+  G.anims = G.anims.filter(n => n.t < SHEETS[n.name][2] * n.tpf);
+  for (const g of G.gores) {
+    g.t++; g.vy += 0.3; g.x += g.vx; g.y += g.vy; g.rot += g.vr;
+    const half = SHEETS[g.name][1] / 2;
+    if (g.y > S - half) { g.y = S - half; g.vy *= -0.35; g.vx *= 0.7; g.vr *= 0.6; }
+    if (g.x < 0 || g.x > S) { g.vx *= -0.6; g.x = clamp(g.x, 0, S); }
+  }
+  G.gores = G.gores.filter(g => g.t < 300);
+}
+function drawDebris() {
+  for (const g of G.gores) spr(g.name, 0, g.x, g.y, { rot: g.rot, alpha: g.t > 260 ? (300 - g.t) / 40 : 1 });
+  for (const n of G.anims) spr(n.name, Math.floor(n.t / n.tpf), n.x, n.y, { scale: n.scale, add: true });
+}
+
+function drawExplosion() {
+  if (C.state !== 'wipe') return;
+  const et = C.t - B.WIPE_CHARGE;
+  if (et < 0 || et >= 50) return;
+  spr('Wipe_Explosion', Math.floor(et / 5), C.x, C.y, { scale: B.EXPLOSION_SCALE, add: true });
+}
+
+function drawParticles() {
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  for (const q of G.parts) {
+    ctx.globalAlpha = 1 - q.t / q.life;
+    ctx.fillStyle = q.color;
+    ctx.fillRect(q.x - q.size / 2, q.y - q.size / 2, q.size, q.size);
+  }
+  ctx.restore();
+  for (const b of G.bullets) {
+    ctx.fillStyle = b.pellet ? '#ffb347' : '#fff2c4';
+    const r = b.pellet ? 2 : 3;
+    ctx.fillRect(b.x - r, b.y - r, r * 2, r * 2);
+  }
+  ctx.save();
+  ctx.textAlign = 'center';
+  for (const t of G.texts) {
+    ctx.globalAlpha = 1 - t.t / 60;
+    ctx.font = `600 ${t.size}px ${FONT_UI}`;
+    ctx.fillStyle = '#07060f'; ctx.fillText(t.txt, t.x + 1, t.y + 1);
+    ctx.fillStyle = t.color; ctx.fillText(t.txt, t.x, t.y);
+  }
+  ctx.restore();
+}
+
+function objective() {
+  const k = C.target, s = C.state;
+  if (!opt.hints) return '';
+  switch (s) {
+    case 'intro': return 'O Avatar desperta…';
+    case 'await': return `O peito mostra o ${NAMES[k]}: bata na ${HAND_NAME[k]}`;
+    case 'test':
+      if (k === ABYSS) return 'Quebre os blocos até o centro e destrua o emissor com a aura desligada';
+      if (k === VOID) return 'Martele os blocos para copiar a sequência do painel';
+      return `Atravesse os anéis em ordem (${G.cel ? G.cel.next : 0}/${B.RING_COUNT})`;
+    case 'buffready': return k === VOID ? 'Quebre a trava do Vácuo' : 'Quebre o bloco Celeste';
+    case 'chestready': return `Use o ${SEAL_NAME[k]} para quebrar o peito do núcleo`;
+    case 'exposed': return `Peito exposto: cause dano até ${(3 - C.q) * 25}%`;
+    case 'lock': return 'Escudo ativo. O próximo ciclo vai começar.';
+    case 'finalintro': return '25% finais: as três mãos';
+    case 'chestfinal': return 'Com os três selos, quebre a máscara';
+    case 'revealopen': case 'exposedfinal': return 'Golpe final!';
+    case 'wipe': return 'MÃO ERRADA: WIPE';
+    case 'dead': return 'O Avatar caiu';
+  }
+  return '';
+}
+
+function drawHUD() {
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.imageSmoothingEnabled = false;
+  const m = 16;
+  // vida e voo
+  ctx.fillStyle = 'rgba(7,6,15,0.7)'; ctx.fillRect(m - 4, m - 4, 236, 64);
+  ctx.fillStyle = '#3a1520'; ctx.fillRect(m, m, 228, 14);
+  ctx.fillStyle = '#ff5464'; ctx.fillRect(m, m, 228 * P.hp / B.PLAYER_LIFE, 14);
+  ctx.font = `600 12px ${FONT_UI}`; ctx.fillStyle = '#fff'; ctx.textAlign = 'left';
+  ctx.fillText(`Vida ${fmt(P.hp)} / ${B.PLAYER_LIFE}`, m + 4, m + 11);
+  ctx.fillStyle = '#16233a'; ctx.fillRect(m, m + 18, 228, 5);
+  ctx.fillStyle = '#5aa6ff'; ctx.fillRect(m, m + 18, 228 * P.flight / B.FLIGHT_TIME, 5);
+  ctx.fillStyle = '#a198c4';
+  ctx.fillText(P.potionCd > 0 ? `Poção em ${Math.ceil(P.potionCd / 60)} s` : 'Q: poção pronta', m, m + 38);
+  ctx.fillStyle = '#ece7fa';
+  ctx.fillText(`${opt.weapon + 1}: ${WEAPON_NAME[opt.weapon]}  ·  E troca`, m, m + 53);
+  [...P.seals].forEach((k, i) => {
+    const x = m + i * 40, y = m + 68;
+    ctx.fillStyle = 'rgba(7,6,15,0.7)'; ctx.fillRect(x - 2, y - 2, 36, 36);
+    ctx.drawImage(IMG[SEAL_ICON[k]], x, y);
+  });
+  if (P.seals.size) { ctx.fillStyle = '#ece7fa'; ctx.fillText([...P.seals].map(k => SEAL_NAME[k]).join(' · '), m, m + 118); }
+
+  // objetivo e relógio
+  ctx.textAlign = 'center';
+  ctx.font = `600 ${cw < 600 ? 14 : 17}px ${FONT_UI}`;
+  const obj = objective(), oc = C.state === 'wipe' ? '#ff5464' : (C.target >= 0 && ['await', 'test', 'buffready', 'chestready'].includes(C.state)) ? COLORS[C.target] : '#ece7fa';
+  if (obj) {
+    const tw = Math.min(cw - 32, ctx.measureText(obj).width + 28);
+    ctx.fillStyle = 'rgba(7,6,15,0.7)'; ctx.fillRect(cw / 2 - tw / 2, 82, tw, 30);
+    ctx.fillStyle = oc; ctx.fillText(obj, cw / 2, 103, cw - 40);
+  }
+  if (C.state === 'test') {
+    const r = C.testT / 60, f = clamp(12 - Math.ceil(r / 5), 0, 12);
+    ctx.drawImage(IMG.Test_Timer, 0, f * 64, 64, 64, cw / 2 - 52, 10, 64, 64);
+    ctx.font = `600 18px ${FONT_UI}`;
+    ctx.fillStyle = r > 30 ? '#ffffff' : r > 15 ? '#f0c35a' : '#ff5464';
+    const sec = Math.ceil(r);
+    ctx.textAlign = "left"; ctx.fillText(`${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`, cw / 2 + 18, 48); ctx.textAlign = "center";
+  }
+
+  // avisos
+  G.toasts.forEach((t, i) => {
+    const a = t.t < 15 ? t.t / 15 : t.t > t.life - 30 ? (t.life - t.t) / 30 : 1;
+    ctx.globalAlpha = a;
+    ctx.font = `600 ${cw < 600 ? 16 : 21}px ${FONT_DISPLAY}`;
+    const y = Math.max(ch * 0.3, 222) + i * 34;
+    ctx.fillStyle = '#07060f'; ctx.fillText(t.txt, cw / 2 + 2, y + 2, cw - 40);
+    ctx.fillStyle = t.color; ctx.fillText(t.txt, cw / 2, y, cw - 40);
+  });
+  ctx.globalAlpha = 1;
+
+  // barra do boss
+  const bw = Math.min(680, cw - 32), bx = (cw - bw) / 2, by = ch - 44;
+  ctx.fillStyle = 'rgba(7,6,15,0.78)'; ctx.fillRect(bx - 6, by - 28, bw + 12, 50);
+  ctx.font = `800 14px ${FONT_DISPLAY}`; ctx.textAlign = 'left'; ctx.fillStyle = '#ece7fa';
+  ctx.fillText('AVATAR DOS MIL BRAÇOS', bx, by - 10);
+  ctx.textAlign = 'right'; ctx.font = `600 13px ${FONT_UI}`; ctx.fillStyle = '#a198c4';
+  ctx.fillText(`${fmt(C.life)} / ${fmt(B.CORE_LIFE)}`, bx + bw, by - 10);
+  ctx.fillStyle = '#221a3b'; ctx.fillRect(bx, by, bw, 14);
+  const exposed = C.state === 'exposed' || C.state === 'exposedfinal';
+  ctx.fillStyle = exposed ? '#ff5464' : '#9b8be0';
+  ctx.fillRect(bx, by, bw * C.life / B.CORE_LIFE, 14);
+  for (const f of [0.25, 0.5, 0.75]) { ctx.fillStyle = '#07060f'; ctx.fillRect(bx + bw * f - 1, by, 2, 14); }
+  if (C.q < 3 && C.state !== 'dead') {
+    const tx = bx + bw * threshold() / B.CORE_LIFE;
+    ctx.fillStyle = '#ece7fa'; ctx.fillRect(tx - 4, by - 5, 8, 4); ctx.fillRect(tx - 1, by - 5, 2, 19);
+  }
+  ctx.textAlign = 'left';
+}
+
+function render() {
+  if (!G) return;
+  drawStars();
+  const z = viewScale();
+  const sh = reducedMotion ? 0 : G.shake;
+  const sx = sh ? rand(-sh, sh) : 0, sy = sh ? rand(-sh, sh) : 0;
+  ctx.setTransform(dpr * z, 0, 0, dpr * z, dpr * (cw / 2 - G.cam.x * z + sx), dpr * (ch / 2 - G.cam.y * z + sy));
+  ctx.imageSmoothingEnabled = false;
+  drawCore();
+  drawHands();
+  drawArena();
+  drawAbyss();
+  drawVoid();
+  drawCelestial();
+  drawAttacks();
+  drawPlayer();
+  drawRingArrow();
+  drawDebris();
+  drawParticles();
+  drawExplosion();
+  drawHUD();
+}
+
+// ---------- telas ----------
+const $ = id => document.getElementById(id);
+function showEnd(kind) {
+  running = false;
+  const secs = Math.floor(G.time / 60), t = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+  const pct = Math.round(C.life / B.CORE_LIFE * 100);
+  if (kind === 'win') {
+    $('endEyebrow').textContent = `Vitória · ${t}`;
+    $('endTitle').textContent = 'O Avatar caiu';
+    $('endText').textContent = 'Os três ciclos e as três mãos finais foram concluídos.';
+  } else if (kind === 'wipe') {
+    $('endEyebrow').textContent = `Wipe · núcleo com ${pct}%`;
+    $('endTitle').textContent = 'Mão errada';
+    $('endText').textContent = 'O núcleo explodiu e matou todos na arena.';
+  } else {
+    $('endEyebrow').textContent = `Derrota · núcleo com ${pct}%`;
+    $('endTitle').textContent = 'Você morreu';
+    $('endText').textContent = 'Os ataques das outras mãos continuam durante cada teste. A poção (Q) recarrega em 40 segundos.';
+  }
+  $('endScreen').hidden = false;
+  $('btnAgain').focus();
+}
+function restart() {
+  newGame();
+  $('endScreen').hidden = true; $('pauseScreen').hidden = true;
+  running = true; paused = false;
+}
+function togglePause() {
+  if (!started || !running) return;
+  paused = !paused;
+  $('pauseScreen').hidden = !paused;
+}
+
+$('btnStart').addEventListener('click', () => { $('startScreen').hidden = true; started = true; restart(); });
+$('btnAgain').addEventListener('click', restart);
+$('btnResume').addEventListener('click', togglePause);
+$('btnPauseRestart').addEventListener('click', restart);
+$('btnRestart').addEventListener('click', () => { if (started) restart(); });
+// atalho de visualização: as mãos vivas morrem primeiro e, em seguida, o núcleo
+$('btnDeath').addEventListener('click', () => {
+  if (!running || C.state === 'dying' || C.state === 'dead' || C.state === 'wipe') return;
+  teardownTest(false);
+  setState('chestfinal');
+  const alive = G.hands.filter(h => !h.destroyed && !h.dying);
+  alive.forEach((h, i) => { h.dying = B.HAND_DEATH_TIME + i * 12; });
+  G.deathAt = G.tick + (alive.length ? B.HAND_DEATH_TIME + alive.length * 12 + 30 : 1);
+});
+$('tuneBtn').addEventListener('click', () => { $('tune').hidden = !$('tune').hidden; });
+$('optGod').addEventListener('change', e => { opt.god = e.target.checked; });
+$('optHints').addEventListener('change', e => { opt.hints = e.target.checked; });
+$('btnComplete').addEventListener('click', () => {
+  if (!running) return;
+  if (C.state === 'await') startTest();
+  if (C.state !== 'test') return;
+  if (C.target === ABYSS) grantSeal(ABYSS, G.abyss.cx, G.abyss.cy);
+  else if (C.target === VOID) { const V = G.voidT; V.tiles.forEach((t, i) => { t.shape = V.seq[i]; }); V.lock.unlocked = true; setState('buffready'); }
+  else { const K = G.cel; K.rings.forEach(r => { r.passed = true; }); K.next = K.rings.length; K.block = { x: CX, y: 380, t: 0, hits: 0, flash: 0 }; setState('buffready'); }
+});
+$('btnFinal').addEventListener('click', () => {
+  if (!running) return;
+  teardownTest(false);
+  C.q = 2; C.life = B.CORE_LIFE / 4 + 1;
+  beginLock();
+  C.life = B.CORE_LIFE / 4;
+});
+// o teclado é do jogo: tira o foco de botões e caixas depois do clique, para Espaço não acioná-los
+document.querySelectorAll('button, input').forEach(el => el.addEventListener(el.tagName === 'INPUT' ? 'change' : 'click', () => el.blur()));
+if (matchMedia('(pointer: coarse)').matches && !matchMedia('(pointer: fine)').matches) $('touchNote').hidden = false;
+
+// ---------- carregamento e laço ----------
+function loadAll() {
+  return Promise.all(Object.keys(SHEETS).map(n => new Promise((res, rej) => {
+    const im = new Image();
+    im.onload = () => { IMG[n] = im; res(); };
+    im.onerror = () => rej(n);
+    im.src = n.startsWith('Gore_') ? `Assets/Gores/${n}.png` : `Assets/${n}.png`;
+  })));
+}
+
+let last = performance.now(), acc = 0;
+function frame(now) {
+  acc += Math.min(100, now - last);
+  last = now;
+  while (acc >= 1000 / 60) {
+    if (running && !paused) update();
+    acc -= 1000 / 60;
+  }
+  render();
+  requestAnimationFrame(frame);
+}
+
+function boot(data) {
+  if (data && data.opt) {
+    Object.assign(opt, data.opt);
+    $('optGod').checked = opt.god; $('optHints').checked = opt.hints;
+  }
+  window.claude?.hot?.snapshot?.(() => ({ opt }));
+  newGame();
+  loadAll().then(() => (document.fonts ? document.fonts.ready : null)).then(() => {
+    $('btnStart').disabled = false;
+    $('btnStart').textContent = 'Começar a luta';
+  }).catch(name => {
+    $('btnStart').textContent = 'Sprites não encontradas';
+    $('loadError').hidden = false;
+    $('loadError').textContent = `Não consegui carregar Assets/${name}.png. Abra este arquivo de dentro da pasta AvatarDosMilBracos, ao lado da pasta Assets.`;
+  });
+  requestAnimationFrame(frame);
+}
+window.claude?.hot?.ready ? window.claude.hot.ready(boot) : boot(window.claude?.hot?.data ?? {});
+})();
+</script>
+
+</body>
+</html>
