@@ -325,6 +325,7 @@ const BALANCE = {
   LASER_DAMAGE: 90,
   LASER_HALF_WIDTH: 14,
   HAND_LASER_THICKNESS: 1.5,
+  VOID_RETRACT: 200,            // quanto a mão do Vácuo entra na parede para mirar e atirar
   ORB_COUNT: 5,
   ORB_SPEED: 3.2,
   ORB_SKY_SPEED: 4.5,           // orbes da mão do Abismo: nascem no teto e caem na direção do jogador
@@ -485,7 +486,7 @@ function newGame() {
       { kind: CELESTIAL, side: 0, y: 0, baseY: 0 },
       { kind: VOID, side: -1, y: Math.round(S * 0.4), baseY: Math.round(S * 0.4) },
       { kind: VOID, side: 1, y: Math.round(S * 0.66), baseY: Math.round(S * 0.66) },
-    ].map(h => Object.assign(h, { emerge: 0, destroyed: false, dying: 0, anim: Math.random() * 100, flash: 0, cast: 0, laser: null, proc: 0, procT: 0 })),
+    ].map(h => Object.assign(h, { emerge: 0, destroyed: false, dying: 0, anim: Math.random() * 100, flash: 0, cast: 0, laser: null, proc: 0, procT: 0, retract: 0 })),
     cd: [120, 220, 80], voidNext: 0, finalBatCd: 40,
     abyss: null, voidT: null, cel: null,
     bullets: [], lasers: [], orbs: [], starsP: [], bolts: [], bats: [],
@@ -612,7 +613,7 @@ function beginLock() {
   burst(C.x, C.y + 20, '#d9d0ff', 40, 8, 50);
   toast(`${(4 - C.q) * 25}%: o núcleo travou e fechou o peito.`, '#d9d0ff');
   for (const h of G.hands) {
-    if (h.destroyed || h.dying) { h.destroyed = false; h.dying = 0; h.emerge = 0; }
+    if (h.destroyed || h.dying) { h.destroyed = false; h.dying = 0; h.emerge = 0; h.laser = null; h.retract = 0; h.y = h.baseY; }
   }
   G.cd = [140, 240, 100];
 }
@@ -819,7 +820,7 @@ function handGeom(h) {
     const bot = 292 - (1 - e) * 330;
     return { cx: CX, cy: bot - 154, rect: { x: CX - 58, y: 0, w: 116, h: Math.max(0, bot) }, palm: { x: CX, y: bot - 95 } };
   }
-  const off = (1 - e) * 340;
+  const off = (1 - e) * 340 + h.retract * B.VOID_RETRACT;
   if (h.side < 0) {
     const left = -40 - off;
     return { cx: left + 154, cy: h.y, flip: false, rect: { x: 0, y: h.y - 58, w: Math.max(0, left + 290), h: 116 }, lens: { x: left + 163, y: h.y } };
@@ -827,7 +828,7 @@ function handGeom(h) {
   const right = S + 40 + off;
   return { cx: right - 154, cy: h.y, flip: true, rect: { x: Math.min(S, right - 290), y: h.y - 58, w: Math.max(0, S - (right - 290)), h: 116 }, lens: { x: right - 163, y: h.y } };
 }
-const handHittable = h => !h.destroyed && !h.dying && h.emerge > 0.9;
+const handHittable = h => !h.destroyed && !h.dying && h.emerge > 0.9 && h.retract === 0;
 
 function updateHands() {
   for (const h of G.hands) {
@@ -848,20 +849,24 @@ function updateHands() {
     } else if (!h.destroyed && C.state !== 'wipe') {
       h.emerge = Math.min(1, h.emerge + 1 / 70);
     }
-    if (h.kind === VOID && h.laser) {
+    // Vácuo: entra na parede, desliza até a altura do jogador e atira de lá; só sai de novo na posição original
+    if (h.kind === VOID && !h.dying) {
       const L = h.laser;
-      if (L.phase === 'aim') {
-        h.y = lerp(h.y, clamp(pc().y, 150, S - 150), 0.1);
-        if (++L.t >= B.LASER_AIM) {
-          const g = handGeom(h);
-          L.phase = 'beam';
-          L.beam = h.side < 0
-            ? makeLaser(g.lens.x, h.y, 0, S - g.lens.x, B.HAND_LASER_THICKNESS, B.LASER_DAMAGE)
-            : makeLaser(g.lens.x, h.y, Math.PI, g.lens.x, B.HAND_LASER_THICKNESS, B.LASER_DAMAGE);
-        }
-      } else if (L.beam && L.beam.done) h.laser = null;
-    } else if (h.kind === VOID && !h.dying) {
-      h.y = lerp(h.y, h.baseY, 0.02);
+      h.retract = clamp(h.retract + (L || h.y !== h.baseY ? 1 / 12 : -1 / 25), 0, 1);
+      if (L) {
+        if (L.phase === 'aim') {
+          if (h.retract >= 1) h.y = lerp(h.y, clamp(pc().y, 150, S - 150), 0.15);
+          if (++L.t >= B.LASER_AIM) {
+            L.phase = 'beam';
+            L.beam = h.side < 0
+              ? makeLaser(0, h.y, 0, S, B.HAND_LASER_THICKNESS, B.LASER_DAMAGE)
+              : makeLaser(S, h.y, Math.PI, S, B.HAND_LASER_THICKNESS, B.LASER_DAMAGE);
+          }
+        } else if (L.beam && L.beam.done) h.laser = null;
+      } else if (h.retract >= 1) {
+        h.y = lerp(h.y, h.baseY, 0.08);
+        if (Math.abs(h.y - h.baseY) < 2) h.y = h.baseY;
+      }
     }
   }
 }
@@ -1637,6 +1642,11 @@ function drawStars() {
 }
 
 function drawHands() {
+  // a parte recuada fica escondida atrás da parede, sem aparecer fora da arena
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(-48, -48, S + 96, S + 96);
+  ctx.clip();
   for (const h of G.hands) {
     if (h.destroyed) continue;
     const g = handGeom(h);
@@ -1652,6 +1662,7 @@ function drawHands() {
     if (glow) spr(name, handFrame(h), g.cx, g.cy, { flip: g.flip, alpha: glow, add: true });
   }
   for (const c of G.crystals) spr('Celestial_Crystal', Math.floor(c.t / 6), c.x, c.y, { alpha: 1 - c.t / 90, add: true });
+  ctx.restore();
 }
 
 function drawCore() {
