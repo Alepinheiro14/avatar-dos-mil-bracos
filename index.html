@@ -132,6 +132,13 @@ button.ghost {
 button:disabled { opacity: 0.5; cursor: wait; }
 button:focus-visible, input:focus-visible { outline: 2px solid var(--azure); outline-offset: 2px; }
 #touchNote { color: var(--danger); font-size: 14px; }
+#endWeapon {
+  width: 192px;
+  height: 88px;
+  image-rendering: pixelated;
+  justify-self: start;
+  filter: drop-shadow(0 0 12px color-mix(in srgb, var(--gold) 55%, transparent));
+}
 #tuneBtn {
   position: fixed;
   top: calc(12px + env(safe-area-inset-top, 0px));
@@ -165,6 +172,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--azure); out
 <div id="tune" hidden>
   <label><input type="checkbox" id="optGod"> Invencível (o wipe ainda mata)</label>
   <label><input type="checkbox" id="optHints"> Mostrar dicas na tela</label>
+  <label><input type="checkbox" id="optUnlock"> Rotativa dos Mil Braços liberada (cai na 1ª vitória)</label>
   <button type="button" class="ghost" id="btnComplete">Concluir o teste atual</button>
   <button type="button" class="ghost" id="btnFinal">Pular para os 25% finais</button>
   <button type="button" class="ghost" id="btnDeath">Ver a morte do boss</button>
@@ -190,7 +198,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--azure); out
       <dt>Botão esquerdo</dt><dd>Atirar</dd>
       <dt>Botão direito</dt><dd>Espada (golpe em arco)</dd>
       <dt>Clique em blocos pequenos</dt><dd>Martelo: esquerdo avança o formato, direito volta</dd>
-      <dt><kbd>1</kbd> <kbd>2</kbd> · <kbd>E</kbd></dt><dd>Pistola ou escopeta · alternar</dd>
+      <dt><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> · <kbd>E</kbd></dt><dd>Pistola, escopeta ou a arma que o Avatar solta na primeira vitória · alternar</dd>
       <dt><kbd>Q</kbd></dt><dd>Poção de cura</dd>
       <dt><kbd>P</kbd> / <kbd>Esc</kbd> · <kbd>R</kbd></dt><dd>Pausar · reiniciar</dd>
       <dt>Roda do mouse</dt><dd>Zoom</dd>
@@ -217,8 +225,10 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--azure); out
   <div class="card">
     <p class="eyebrow" id="endEyebrow"></p>
     <h2 id="endTitle"></h2>
+    <canvas id="endWeapon" width="192" height="88" hidden></canvas>
     <p id="endText"></p>
     <div class="row">
+      <button type="button" id="btnAgainWeapon" hidden>Jogar com a nova arma</button>
       <button type="button" id="btnAgain">Tentar de novo</button>
     </div>
   </div>
@@ -267,6 +277,15 @@ const BALANCE = {
   SHOTGUN_SPREAD: 0.32,         // abertura total do leque, em radianos
   SHOTGUN_SPEED: 15,
   SHOTGUN_RANGE: 32,            // vida do chumbo em ticks (alcance curto)
+  AVATAR_COOLDOWN: 6,           // rotativa dos Mil Braços: automática, troca o projétil a cada tiro
+  AVATAR_ORB_DAMAGE: 110,       // orbe do Abismo: lento, grande
+  AVATAR_ORB_SPEED: 11,
+  AVATAR_STAR_DAMAGE: 130,      // estrela Celeste: segue o cursor
+  AVATAR_STAR_SPEED: 10,
+  AVATAR_STAR_HOMING: 0.12,
+  AVATAR_LASER_DAMAGE: 150,     // feixe do Vácuo: muito rápido
+  AVATAR_LASER_SPEED: 26,
+  AVATAR_SPREAD: 0.05,
   SWORD_DAMAGE: 380,
   SWORD_COOLDOWN: 22,
   SWORD_RANGE: 84,
@@ -380,6 +399,7 @@ const SHEETS = {
   Core_Death: [302, 346, 16],
   Hand_Abyss_Floor_Death: [154, 308, 6], Hand_Celestial_Ceiling_Death: [154, 308, 6], Hand_Void_Wall_Death: [308, 154, 6],
   Arm_Explosion_Abyss: [128, 128, 8], Arm_Explosion_Celestial: [128, 128, 8], Arm_Explosion_Void: [128, 128, 8],
+  Weapon_MilBracos: [48, 22, 3],
   Gore_MaskLeft: [20, 56, 1], Gore_MaskRight: [20, 56, 1], Gore_Horn: [20, 44, 1], Gore_Rib: [28, 16, 1],
   Gore_EyeShard: [18, 22, 1], Gore_Tendril: [16, 44, 1], Gore_Claw: [16, 28, 1], Gore_Plate: [36, 22, 1], Gore_Bronze: [32, 14, 1],
 };
@@ -440,7 +460,8 @@ addEventListener('keydown', e => {
   if (!e.repeat) dashTap(e.code);
   if (e.code === 'Digit1') opt.weapon = 0;
   if (e.code === 'Digit2') opt.weapon = 1;
-  if (e.code === 'KeyE' && !e.repeat) opt.weapon = 1 - opt.weapon;
+  if (e.code === 'Digit3' && opt.unlocked) opt.weapon = 2;
+  if (e.code === 'KeyE' && !e.repeat) opt.weapon = (opt.weapon + 1) % (opt.unlocked ? 3 : 2);
   if (e.code === 'KeyP' || e.code === 'Escape') togglePause();
   if (e.code === 'KeyR' && started) restart();
 });
@@ -473,8 +494,14 @@ function dashTap(code) {
 // ---------- estado ----------
 let G, P, C;
 let started = false, running = false, paused = false;
-const opt = { god: false, hints: false, weapon: 0 };
-const WEAPON_NAME = ['Pistola', 'Escopeta'];
+const opt = { god: false, hints: false, weapon: 0, unlocked: false };
+const WEAPON_NAME = ['Pistola', 'Escopeta', 'Rotativa dos Mil Braços'];
+const UNLOCK_KEY = 'avatar.rotativa';
+try { opt.unlocked = localStorage.getItem(UNLOCK_KEY) === '1'; } catch (e) { /* sem armazenamento: a arma vale só nesta visita */ }
+function unlockWeapon() {
+  opt.unlocked = true;
+  try { localStorage.setItem(UNLOCK_KEY, '1'); } catch (e) { /* idem */ }
+}
 const stars = Array.from({ length: 320 }, () => ({ x: Math.random(), y: Math.random(), s: Math.random() < 0.15 ? 2 : 1, b: rand(0.25, 0.9), p: rand(0.05, 0.25) }));
 
 function newGame() {
@@ -492,6 +519,7 @@ function newGame() {
     bullets: [], lasers: [], orbs: [], starsP: [], bolts: [], bats: [],
     parts: [], crystals: [], texts: [], toasts: [], anims: [], gores: [],
     endTimer: 0, immuneCd: 0, swingFx: null,
+    drop: null, avatarShot: 0, muzzle: 0,
   };
   P = {
     x: S / 2 - 10, y: S - 42, w: 20, h: 42, vx: 0, vy: 0, onGround: true, face: 1,
@@ -709,7 +737,43 @@ function updateDeath() {
     burst(C.x, C.y + 20, '#e05ad6', 120, 12, 90);
     G.shake = 30;
     setState('dead');
+    // na primeira vitória o Avatar solta a rotativa; ela cai, quica e voa até o jogador
+    if (!opt.unlocked) G.drop = { x: C.x, y: C.y + 20, vx: rand(-1.5, 1.5), vy: -6, t: 0 };
   }
+}
+function updateDrop() {
+  const D = G.drop;
+  if (!D || D.picked) return;
+  D.t++;
+  const p = pc();
+  if (D.t > 70 || D.t > 20 && dist(D.x, D.y, p.x, p.y) < 120) {
+    const a = Math.atan2(p.y - D.y, p.x - D.x), v = Math.min(14, 3 + (D.t - 20) * 0.25);
+    D.vx = lerp(D.vx, Math.cos(a) * v, 0.2); D.vy = lerp(D.vy, Math.sin(a) * v, 0.2);
+  } else {
+    D.vy += 0.35; D.vx *= 0.99;
+  }
+  D.x = clamp(D.x + D.vx, 24, S - 24); D.y += D.vy;
+  if (D.y > S - 14) { D.y = S - 14; D.vy *= -0.45; D.vx *= 0.8; }
+  if (!P.dead && dist(D.x, D.y, p.x, p.y) < 26) {
+    D.picked = true;
+    unlockWeapon();
+    burst(p.x, p.y, '#e9bb4f', 40, 6, 50);
+    for (const c of COLORS) burst(p.x, p.y, c, 12, 4, 40);
+    floatText(p.x, P.y - 10, 'Rotativa dos Mil Braços', '#e9bb4f', 18);
+    G.endTimer = 80; P.deathReason = 'win';
+  }
+}
+function drawDrop() {
+  const D = G.drop;
+  if (!D || D.picked) return;
+  const f = Math.floor(D.t / 10) % 3, bob = Math.sin(D.t * 0.1) * 3;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const g = ctx.createRadialGradient(D.x, D.y + bob, 4, D.x, D.y + bob, 46);
+  g.addColorStop(0, COLORS[f] + 'aa'); g.addColorStop(1, COLORS[f] + '00');
+  ctx.fillStyle = g; ctx.fillRect(D.x - 46, D.y + bob - 46, 92, 92);
+  ctx.restore();
+  spr('Weapon_MilBracos', f, D.x, D.y + bob, { rot: -0.5 + Math.sin(D.t * 0.05) * 0.2, scale: 1.5 });
 }
 
 function killPlayer(reason) {
@@ -781,7 +845,7 @@ function updateCore() {
       break;
     }
     case 'dying': updateDeath(); break;
-    case 'dead': if (C.t === 150) showEnd('win'); break;
+    case 'dead': if (C.t === 150 && !G.drop) showEnd('win'); break;
   }
 }
 
@@ -1439,7 +1503,17 @@ function updatePlayer() {
   const aim = Math.atan2(mouse.wy - p.y, mouse.wx - p.x);
   if (mouse.left && P.gunCd <= 0) {
     const sx = p.x + Math.cos(aim) * 16, sy = p.y + Math.sin(aim) * 16;
-    if (opt.weapon === 1) {
+    if (opt.weapon === 2) {
+      // rotativa: cada tiro sai de um cano e avança a cor; Abismo → Celeste → Vácuo
+      P.gunCd = B.AVATAR_COOLDOWN;
+      const k = G.avatarShot++ % 3, a = aim + rand(-B.AVATAR_SPREAD, B.AVATAR_SPREAD);
+      const mx = p.x + Math.cos(aim) * 30, my = p.y + Math.sin(aim) * 30;
+      G.muzzle = 4;
+      if (k === ABYSS) G.bullets.push({ x: mx, y: my, vx: Math.cos(a) * B.AVATAR_ORB_SPEED, vy: Math.sin(a) * B.AVATAR_ORB_SPEED, t: 0, life: 80, dmg: B.AVATAR_ORB_DAMAGE, kind: ABYSS });
+      else if (k === CELESTIAL) G.bullets.push({ x: mx, y: my, vx: Math.cos(a) * B.AVATAR_STAR_SPEED, vy: Math.sin(a) * B.AVATAR_STAR_SPEED, t: 0, life: 90, dmg: B.AVATAR_STAR_DAMAGE, kind: CELESTIAL, old: [] });
+      else G.bullets.push({ x: mx, y: my, vx: Math.cos(a) * B.AVATAR_LASER_SPEED, vy: Math.sin(a) * B.AVATAR_LASER_SPEED, t: 0, life: 60, dmg: B.AVATAR_LASER_DAMAGE, kind: VOID });
+      G.shake = Math.max(G.shake, 1);
+    } else if (opt.weapon === 1) {
       P.gunCd = B.SHOTGUN_COOLDOWN;
       const shot = new Set();   // peças e mãos já atingidas por este disparo
       for (let i = 0; i < B.SHOTGUN_PELLETS; i++) {
@@ -1470,13 +1544,21 @@ function updateBullets() {
   if (!G.bullets.length) return;
   const targets = buildTargets();
   for (const b of G.bullets) {
+    if (b.kind === CELESTIAL) {
+      // a estrela segue o cursor, não o boss: assim ela nunca cai numa mão por conta própria
+      const a = Math.atan2(mouse.wy - b.y, mouse.wx - b.x);
+      b.vx = lerp(b.vx, Math.cos(a) * B.AVATAR_STAR_SPEED, B.AVATAR_STAR_HOMING);
+      b.vy = lerp(b.vy, Math.sin(a) * B.AVATAR_STAR_SPEED, B.AVATAR_STAR_HOMING);
+      b.old.unshift({ x: b.x, y: b.y });
+      if (b.old.length > 6) b.old.pop();
+    }
     for (let step = 0; step < 2 && !b.dead; step++) {
       b.x += b.vx / 2; b.y += b.vy / 2;
       if (b.x < 0 || b.x > S || b.y < 0 || b.y > S) { b.dead = true; burst(b.x, b.y, '#cfc6ff', 3, 2, 12); break; }
       for (const tg of targets) {
         if (!pointIn(tg.r, b.x, b.y)) continue;
         b.dead = true;
-        burst(b.x, b.y, '#fff2c4', 4, 2, 14);
+        burst(b.x, b.y, b.kind != null ? COLORS[b.kind] : '#fff2c4', b.kind != null ? 8 : 4, b.kind != null ? 3 : 2, 14);
         if (b.shot && tg.key) { if (b.shot.has(tg.key)) break; b.shot.add(tg.key); }
         tg.hit(b.dmg);
         break;
@@ -1515,9 +1597,23 @@ function drawPlayer() {
   const aim = Math.atan2(mouse.wy - p.y, mouse.wx - p.x);
   ctx.translate(p.x, p.y);
   ctx.rotate(aim);
-  ctx.fillStyle = P.hammerFx > 0 ? '#9fc8ff' : '#d8d2ee';
-  ctx.fillRect(4, -2, P.hammerFx > 0 ? 12 : 18, 4);
+  if (opt.weapon === 2 && P.hammerFx <= 0) {
+    // a rotativa mostra a cor do próximo tiro; vira de cabeça para baixo ao mirar para a esquerda
+    if (Math.cos(aim) < 0) ctx.scale(1, -1);
+    const f = G.avatarShot % 3;
+    ctx.drawImage(IMG.Weapon_MilBracos, 0, f * 22, 48, 22, -6, -11, 48, 22);
+    if (G.muzzle > 0) {
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = COLORS[(f + 2) % 3];
+      ctx.globalAlpha = G.muzzle / 4;
+      ctx.beginPath(); ctx.arc(44, 0, 5 + G.muzzle, 0, Math.PI * 2); ctx.fill();
+    }
+  } else {
+    ctx.fillStyle = P.hammerFx > 0 ? '#9fc8ff' : '#d8d2ee';
+    ctx.fillRect(4, -2, P.hammerFx > 0 ? 12 : 18, 4);
+  }
   ctx.restore();
+  if (G.muzzle > 0) G.muzzle--;
   [...P.seals].forEach((k, i) => {
     const a = G.tick * 0.05 + i * Math.PI * 2 / 3;
     ctx.fillStyle = COLORS[k];
@@ -1585,6 +1681,7 @@ function update() {
   updateBullets();
   updateFx();
   updateDebris();
+  updateDrop();
   updateCamera();
   if (G.deathAt && G.tick >= G.deathAt) { G.deathAt = 0; if (C.state === 'chestfinal') startDeath(); }
   if (!P.dead && C.state !== 'dead') G.time++;
@@ -1708,9 +1805,23 @@ function drawParticles() {
   }
   ctx.restore();
   for (const b of G.bullets) {
-    ctx.fillStyle = b.pellet ? '#ffb347' : '#fff2c4';
-    const r = b.pellet ? 2 : 3;
-    ctx.fillRect(b.x - r, b.y - r, r * 2, r * 2);
+    if (b.kind === ABYSS) spr('Abyss_SpinOrb', Math.floor(G.tick / 4), b.x, b.y, { rot: b.t * 0.3, add: true, scale: 0.7 });
+    else if (b.kind === CELESTIAL) {
+      b.old.forEach((q, i) => spr('Celestial_HomingStar', Math.floor(G.tick / 4), q.x, q.y, { alpha: 0.4 * (1 - i / 6), scale: 0.3 * (1 - i * 0.1), add: true, rot: b.t * 0.2 }));
+      spr('Celestial_HomingStar', Math.floor(G.tick / 4), b.x, b.y, { add: true, rot: b.t * 0.2, scale: 0.38 });
+    } else if (b.kind === VOID) {
+      ctx.save();
+      ctx.translate(b.x, b.y); ctx.rotate(Math.atan2(b.vy, b.vx)); ctx.scale(1, 0.35);
+      ctx.globalCompositeOperation = 'lighter';
+      const f = Math.floor(G.tick / 3) % 4;
+      ctx.drawImage(IMG.Void_LaserStart, 0, f * 40, 32, 40, -44, -20, 32, 40);
+      ctx.drawImage(IMG.Void_LaserEnd, 0, f * 40, 24, 40, -12, -20, 24, 40);
+      ctx.restore();
+    } else {
+      ctx.fillStyle = b.pellet ? '#ffb347' : '#fff2c4';
+      const r = b.pellet ? 2 : 3;
+      ctx.fillRect(b.x - r, b.y - r, r * 2, r * 2);
+    }
   }
   ctx.save();
   ctx.textAlign = 'center';
@@ -1760,7 +1871,7 @@ function drawHUD() {
   ctx.fillStyle = '#5aa6ff'; ctx.fillRect(m, m + 18, 228 * P.flight / B.FLIGHT_TIME, 5);
   ctx.fillStyle = '#a198c4';
   ctx.fillText(P.potionCd > 0 ? `Poção em ${Math.ceil(P.potionCd / 60)} s` : 'Q: poção pronta', m, m + 38);
-  ctx.fillStyle = '#ece7fa';
+  ctx.fillStyle = opt.weapon === 2 ? COLORS[G.avatarShot % 3] : '#ece7fa';
   ctx.fillText(`${opt.weapon + 1}: ${WEAPON_NAME[opt.weapon]}  ·  E troca`, m, m + 53);
   [...P.seals].forEach((k, i) => {
     const x = m + i * 40, y = m + 68;
@@ -1832,6 +1943,7 @@ function render() {
   drawVoid();
   drawCelestial();
   drawAttacks();
+  drawDrop();
   drawPlayer();
   drawRingArrow();
   drawDebris();
@@ -1846,7 +1958,16 @@ function showEnd(kind) {
   running = false;
   const secs = Math.floor(G.time / 60), t = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
   const pct = Math.round(C.life / B.CORE_LIFE * 100);
-  if (kind === 'win') {
+  const newWeapon = kind === 'win' && G.drop && G.drop.picked;
+  $('endWeapon').hidden = !newWeapon;
+  $('btnAgainWeapon').hidden = !newWeapon;
+  $('btnAgain').textContent = newWeapon ? 'Jogar com a pistola' : 'Tentar de novo';
+  $('btnAgain').classList.toggle('ghost', !!newWeapon);
+  if (newWeapon) {
+    $('endEyebrow').textContent = `Vitória · ${t} · novo item`;
+    $('endTitle').textContent = 'Rotativa dos Mil Braços';
+    $('endText').textContent = 'O Avatar soltou a própria arma: uma rotativa automática que alterna os projéteis das três mãos a cada tiro (orbe do Abismo, estrela Celeste que segue o cursor e feixe do Vácuo). Quer enfrentá-lo de novo com ela?';
+  } else if (kind === 'win') {
     $('endEyebrow').textContent = `Vitória · ${t}`;
     $('endTitle').textContent = 'O Avatar caiu';
     $('endText').textContent = 'Os três ciclos e as três mãos finais foram concluídos.';
@@ -1860,7 +1981,17 @@ function showEnd(kind) {
     $('endText').textContent = 'Os ataques das outras mãos continuam durante cada teste. A poção (Q) recarrega em 40 segundos.';
   }
   $('endScreen').hidden = false;
-  $('btnAgain').focus();
+  (newWeapon ? $('btnAgainWeapon') : $('btnAgain')).focus();
+}
+// a arma na tela de vitória, girando as cores
+function drawEndWeapon() {
+  const el = $('endWeapon');
+  if (el.hidden || !IMG.Weapon_MilBracos) return;
+  const c = el.getContext('2d');
+  c.imageSmoothingEnabled = false;
+  c.clearRect(0, 0, el.width, el.height);
+  const f = Math.floor(performance.now() / 500) % 3;
+  c.drawImage(IMG.Weapon_MilBracos, 0, f * 22, 48, 22, 0, 0, el.width, el.height);
 }
 function restart() {
   newGame();
@@ -1874,7 +2005,8 @@ function togglePause() {
 }
 
 $('btnStart').addEventListener('click', () => { $('startScreen').hidden = true; started = true; restart(); });
-$('btnAgain').addEventListener('click', restart);
+$('btnAgain').addEventListener('click', () => { if (opt.weapon === 2) opt.weapon = 0; restart(); });
+$('btnAgainWeapon').addEventListener('click', () => { opt.weapon = 2; restart(); });
 $('btnResume').addEventListener('click', togglePause);
 $('btnPauseRestart').addEventListener('click', restart);
 $('btnRestart').addEventListener('click', () => { if (started) restart(); });
@@ -1890,6 +2022,10 @@ $('btnDeath').addEventListener('click', () => {
 $('tuneBtn').addEventListener('click', () => { $('tune').hidden = !$('tune').hidden; });
 $('optGod').addEventListener('change', e => { opt.god = e.target.checked; });
 $('optHints').addEventListener('change', e => { opt.hints = e.target.checked; });
+$('optUnlock').addEventListener('change', e => {
+  if (e.target.checked) unlockWeapon();
+  else { opt.unlocked = false; if (opt.weapon === 2) opt.weapon = 0; try { localStorage.removeItem(UNLOCK_KEY); } catch (err) { /* sem armazenamento */ } }
+});
 $('btnComplete').addEventListener('click', () => {
   if (!running) return;
   if (C.state === 'await') startTest();
@@ -1928,6 +2064,7 @@ function frame(now) {
     acc -= 1000 / 60;
   }
   render();
+  drawEndWeapon();
   requestAnimationFrame(frame);
 }
 
@@ -1936,6 +2073,7 @@ function boot(data) {
     Object.assign(opt, data.opt);
     $('optGod').checked = opt.god; $('optHints').checked = opt.hints;
   }
+  $('optUnlock').checked = opt.unlocked;
   window.claude?.hot?.snapshot?.(() => ({ opt }));
   newGame();
   loadAll().then(() => (document.fonts ? document.fonts.ready : null)).then(() => {
